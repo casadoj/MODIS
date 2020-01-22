@@ -1,24 +1,27 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# _Autor:_    __Jesús Casado__ <br> _Revisión:_ __21/01/2020__ <br>
+# AUTOR:    Jesús Casado
+# REVISIÓN: 22/01/2020
 # 
-# __Introducción__<br>
+# INTRODUCCIÓN
+# ------------
 # Código con funciones para la descarga y tratamiento de datos MODIS.
 # 
 # Los datos MODIS se descargan del [servidor USGS](https://e4ftl01.cr.usgs.gov/). En dicho enlace se pueden ver las misiones, productos y fechas disponibles. Para poder descargar datos del servidor, es necesario estar registrado en https://urs.earthdata.nasa.gov/.
 # 
 # En el tratamiento de datos se incluye una función para extraer los datos de un producto para la variable, fechas y cuenca de interés.
 # 
-# __Cosas que arreglar__ <br>
+# COSAS QUE ARREGLAR
+# ------------------
 # 
 # ***
-# __Índice__<br>
-# __[Descarga de datos MODIS](#Descarga-de-datos-MODIS)__<br>
+# INDICE
+# ------
+# Descarga de datos MODIS
 # 
-# __[Tratamiento de datos MODIS](#Tratamiento-de-datos-MODIS)__<br>
+# Tratamiento de datos MODIS
 
-# In[1]:
 
 
 import os
@@ -26,10 +29,6 @@ import requests
 import urllib
 from http.cookiejar import CookieJar
 from bs4 import BeautifulSoup
-from datetime import datetime
-
-
-# In[6]:
 
 
 import numpy as np
@@ -38,28 +37,23 @@ import matplotlib.pyplot as plt
 # plt.style.use('seaborn-whitegrid')
 plt.style.use('dark_background')
 get_ipython().run_line_magic('matplotlib', 'inline')
-from netCDF4 import Dataset
-import h5py
-from datetime import datetime, timedelta
 
-import os
+from netCDF4 import Dataset
+# import h5py
+from datetime import datetime, timedelta
 
 from pyproj import Proj, transform#, CRS
 os.environ['PROJ_LIB'] = r'C:\Anaconda3\pkgs\proj4-4.9.3-vc14_5\Library\share'
 
-
-# In[5]:
-
-
-import requests
 url = 'https://raw.githubusercontent.com/casadoj/Calibrar/master/read_write.py'
 r = requests.get(url).text
 exec(r)
 
 
-# ### Descarga de datos MODIS
 
-# In[ ]:
+
+# DESCARGA DE DATOS MODIS
+# -----------------------
 
 
 def EarthdataLogin(username, password, url='https://urs.earthdata.nasa.gov'):
@@ -93,7 +87,6 @@ def EarthdataLogin(username, password, url='https://urs.earthdata.nasa.gov'):
     urllib.request.install_opener(opener)
 
 
-# In[ ]:
 
 
 def extract_dir(url, ext='/'):
@@ -114,7 +107,6 @@ def extract_dir(url, ext='/'):
     return list_dir
 
 
-# In[ ]:
 
 
 def descarga_MODIS(username, password, path, product, start=None, end=None, tiles=None,
@@ -199,9 +191,11 @@ def descarga_MODIS(username, password, path, product, start=None, end=None, tile
                 urllib.request.urlretrieve(urldate + file, file)
 
 
-# ### Tratamiento de datos MODIS
-
-# In[ ]:
+                
+                
+                
+# TRATAMIENTO DE DATOS MODIS
+# --------------------------
 
 
 def ascii2df(pathfile):
@@ -240,11 +234,151 @@ def ascii2df(pathfile):
     return asc
 
 
-# In[ ]:
 
 
-def MODIS_extract(path, product, var, atributes, factor=None, dateslim=None, clip=None,
-                  coordsClip='epsg:25830', verbose=True):
+# def MODIS_extract(path, product, var, atributes, factor=None, dateslim=None, clip=None,
+#                   coordsClip='epsg:25830', verbose=True):
+#     """Extrae los datos de MODIS para un producto, variable y fechas dadas, transforma las coordenadas y recorta a la zona de estudio.
+    
+#     Entradas:
+#     ---------
+#     path:       string. Ruta donde se encuentran los datos de MODIS (ha de haber una subcarpeta para cada producto)
+#     product:    string. Nombre del producto MODIS, p.ej. MOD16A2
+#     var:        string. Variable de interés dentro de los archivos 'hdf'
+#     atributes:  list. [ncols, nrows, Xtopleft, Ytopleft, Xbottomright, Ybottomright]
+#     factor:     float. Factor con el que multiplicar los datos para obtener su valore real (comprobar en la página de MODIS para el producto y variable de interés)
+#     dateslim:   list. Fechas de inicio y fin del periodo de estudio en formato YYYY-MM-DD. Si es 'None', se extraen los datos para todas las fechas disponibles
+#     clip:       string. Ruta y nombre del archivo ASCII que se utilizará como máscara para recortar los datos. Si es 'None', se extraen todos los datos
+#     coordsClip: string. Código EPSG o Proj del sistema de coordenadas al que se quieren transformar los datos. Si en 'None', se mantiene el sistema de coordenadas sinusoidal de MODIS
+#     verbose:    boolean. Si se quiere mostrar en pantalla el desarrollo de la función
+    
+#     Salidas:
+#     --------
+#     Como métodos:
+#         data:    array (2D ó 3D). Mapas de la variable de interés. 3D si hay más de un archivo (más de una fecha)
+#         Xcoords: array (2D). Coordenadas X de cada celda de los mapas de 'data'
+#         Ycoords: array (2D). Coordenadas Y de cada celda de los mapas de 'data'
+#         dates:   list. Fechas a las que corresponde cada uno de los maapas de 'data'
+#     """
+    
+#     # SELECCIÓN DE ARCHIVOS
+#     # ---------------------
+#     if dateslim is not None:
+#         # convertir fechas límite en datetime.date
+#         start = datetime.strptime(dateslim[0], '%Y-%m-%d').date()
+#         end = datetime.strptime(dateslim[1], '%Y-%m-%d').date()
+
+#     # seleccionar archivos del producto y fechas dadas
+#     path = path + product + '/'
+#     os.chdir(path)
+#     dates, files = [], []
+#     for file in [file for file in os.listdir() if product in file]:
+#         year = file.split('.')[1][1:5]
+#         doy = file.split('.')[1][5:]
+#         date = datetime.strptime(' '.join([year, doy]), '%Y %j').date()
+#         if dateslim is not None:
+#             if (date>= start) & (date <= end):
+#                 dates.append(date)
+#                 files.append(file)
+#         else:
+#             dates.append(date)
+#             files.append(file)
+
+#     # ATRIBUTOS MODIS
+#     # ---------------
+#     ncols, nrows, Xo, Yf, Xf, Yo = atributes
+
+#     # coordenadas x de las celdas
+#     Xmodis = np.linspace(Xo, Xf, ncols)
+#     # coordenadas y de las celdas
+#     Ymodis = np.linspace(Yf, Yo, nrows)
+#     # matrices 2D con las coordenadas X e Y de cada celda
+#     XXmodis, YYmodis = np.meshgrid(Xmodis, Ymodis)
+
+#     if coordsClip is not None:
+#         # definir sistemas de referencia de coordenadas
+#         ProjOut = Proj(init=coordsClip)
+#         # https://spatialreference.org/ref/sr-org/modis-sinusoidal/
+#         SINUSOIDAL = Proj(projparams='PROJCS["Sinusoidal",GEOGCS["GCS_Undefined",DATUM["D_Undefined",SPHEROID["User_Defined_Spheroid",6371007.181,0.0]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.017453292519943295]],PROJECTION["Sinusoidal"],PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",0.0],UNIT["Meter",1.0]]')
+
+#         # transformar coordenadas
+#         Xmodis, Ymodis = transform(SINUSOIDAL, ProjOut, XXmodis.flatten(), YYmodis.flatten())
+#         XXmodis, YYmodis = Xmodis.reshape((nrows, ncols)), Ymodis.reshape((nrows, ncols))
+
+#     # CREAR MÁSCARAS
+#     # --------------
+#     if clip is not None:
+#         # cargar ascii
+#         clipdf = ascii2df(clip)
+#         # extensión del ascii
+#         Xbo, Xbf = clipdf.columns.min(), clipdf.columns.max()
+#         Ybo, Ybf = clipdf.index.min(), clipdf.index.max()
+
+#         # mapa auxiliar del tamaño de los hdf
+#         aux = np.ones((nrows, ncols))
+#         # convertir en NaN celdas fuera del rectángulo de extensión de la cuenca
+#         maskExtent = (XXmodis >= Xbo) & (XXmodis <= Xbf) & (YYmodis >= Ybo) & (YYmodis <= Ybf)
+#         aux[~maskExtent] = np.nan
+#         # filas (maskR) y columnas (masC) en la extensión de la cuenca
+#         maskRows = ~np.all(np.isnan(aux), axis=1)
+#         maskCols = ~np.all(np.isnan(aux), axis=0)
+
+#         # recortar aux
+#         aux = aux[maskRows, :][:, maskCols]
+#         # extraer coordenadas en el rectángulo de extensión de la cuenca
+#         XXb, YYb = XXmodis[maskRows, :][:, maskCols], YYmodis[maskRows, :][:, maskCols]
+
+#         # convertir en NaN celdas fuera de la cuenca
+#         for c, (y, x) in enumerate(zip(YYb.flatten(), XXb.flatten())):
+#             ibasin, jbasin = np.argmin(abs(y - clipdf.index)), np.argmin(abs(x - clipdf.columns))
+#             if np.isnan(clipdf.iloc[ibasin, jbasin]):
+#                 imodis, jmodis = int(c / XXb.shape[1]), c % XXb.shape[1]
+#                 aux[imodis, jmodis] = np.nan
+#                 maskClip = np.isnan(aux)
+#         if verbose == True:
+#             print('nº filas: {0:>3}\tnº columnas: {1:>3}'.format(aux.shape[0], aux.shape[1]))
+
+#     # IMPORTAR DATOS
+#     # --------------
+#     for i, file in enumerate(files):
+#         if verbose is True:
+#             print('Archivo {0:>3} de {1:>3}'.format(i + 1, len(files)), end='\r')
+#         # cargar archivo 'hdf'
+#         f = Dataset(path + file, format='hdf4')
+#         # extraer datos de la variable
+#         if clip is not None:  
+#             tmp = f[var][maskRows, :][:, maskCols]
+#             tmp[tmp.mask] = np.nan
+#             tmp[maskClip] = np.nan
+#         else:
+#             tmp = f[var][:]
+#             tmp[tmp.mask] = np.nan
+#         # guardar datos en un array
+#         if i == 0:
+#             data = tmp.data
+#         else:
+#             data = np.dstack((data, tmp.data))
+#         del tmp
+#         f.close()
+#     if factor is not None:
+#         data *= factor
+    
+#     # GUARDAR RESULTADOS
+#     # ------------------
+#     MODIS_extract.data = data
+#     MODIS_extract.dates = dates
+#     if clip is not None:
+#         MODIS_extract.Xcoords = XXb
+#         MODIS_extract.Ycoords = YYb
+#     else:
+#         MODIS_extract.Xcoords = XXmodis
+#         MODIS_extract.Ycoords = YYmodis
+
+
+
+
+def MODIS_extract(path, product, var, factor=None, tiles=None, dateslim=None,
+                  clip=None, coordsClip='epsg:25830', verbose=True):
     """Extrae los datos de MODIS para un producto, variable y fechas dadas, transforma las coordenadas y recorta a la zona de estudio.
     
     Entradas:
@@ -252,8 +386,8 @@ def MODIS_extract(path, product, var, atributes, factor=None, dateslim=None, cli
     path:       string. Ruta donde se encuentran los datos de MODIS (ha de haber una subcarpeta para cada producto)
     product:    string. Nombre del producto MODIS, p.ej. MOD16A2
     var:        string. Variable de interés dentro de los archivos 'hdf'
-    atributes:  list. [ncols, nrows, Xtopleft, Ytopleft, Xbottomright, Ybottomright]
     factor:     float. Factor con el que multiplicar los datos para obtener su valore real (comprobar en la página de MODIS para el producto y variable de interés)
+    tiles:      list. Hojas del producto MODIS a tratar. Si es 'None', se extraen los datos para todas las hojas
     dateslim:   list. Fechas de inicio y fin del periodo de estudio en formato YYYY-MM-DD. Si es 'None', se extraen los datos para todas las fechas disponibles
     clip:       string. Ruta y nombre del archivo ASCII que se utilizará como máscara para recortar los datos. Si es 'None', se extraen todos los datos
     coordsClip: string. Código EPSG o Proj del sistema de coordenadas al que se quieren transformar los datos. Si en 'None', se mantiene el sistema de coordenadas sinusoidal de MODIS
@@ -266,7 +400,9 @@ def MODIS_extract(path, product, var, atributes, factor=None, dateslim=None, cli
         Xcoords: array (2D). Coordenadas X de cada celda de los mapas de 'data'
         Ycoords: array (2D). Coordenadas Y de cada celda de los mapas de 'data'
         dates:   list. Fechas a las que corresponde cada uno de los maapas de 'data'
-    """
+    """    
+    
+    os.chdir(path + product + '/')
     
     # SELECCIÓN DE ARCHIVOS
     # ---------------------
@@ -274,26 +410,43 @@ def MODIS_extract(path, product, var, atributes, factor=None, dateslim=None, cli
         # convertir fechas límite en datetime.date
         start = datetime.strptime(dateslim[0], '%Y-%m-%d').date()
         end = datetime.strptime(dateslim[1], '%Y-%m-%d').date()
-
-    # seleccionar archivos del producto y fechas dadas
-    path = path + product + '/'
-    os.chdir(path)
-    dates, files = [], []
-    for file in [file for file in os.listdir() if product in file]:
-        year = file.split('.')[1][1:5]
-        doy = file.split('.')[1][5:]
-        date = datetime.strptime(' '.join([year, doy]), '%Y %j').date()
-        if dateslim is not None:
-            if (date>= start) & (date <= end):
-                dates.append(date)
-                files.append(file)
-        else:
-            dates.append(date)
-            files.append(file)
+    
+    dates, files = {tile: [] for tile in tiles}, {tile: [] for tile in tiles}
+    for tile in tiles:
+        # seleccionar archivos del producto para las hojas y fechas indicadas
+        for file in [f for f in os.listdir() if (product in f) & (tile in f)]:
+            year = file.split('.')[1][1:5]
+            doy = file.split('.')[1][5:]
+            date = datetime.strptime(' '.join([year, doy]), '%Y %j').date()
+            if dateslim is not None:
+                if (date>= start) & (date <= end):
+                    dates[tile].append(date)
+                    files[tile].append(file)
+            else:
+                dates[tile].append(date)
+                files[tile].append(file)
+    # comprobar que el número de archivos es igual en todas las hojas
+    if len(set([len(dates[tile]) for tile in tiles])) > 1:
+        print('¡ERROR! Diferente número de fechas en las diferentes hojas')
+        return
 
     # ATRIBUTOS MODIS
     # ---------------
-    ncols, nrows, Xo, Yf, Xf, Yo = atributes
+    # extraer atributos para cada hoja
+    attributes = pd.DataFrame(index=tiles, columns=['ncols', 'nrows', 'Xo', 'Yf', 'Xf', 'Yo'])
+    for tile in tiles:
+        attributes.loc[tile,:] = hdfAttrs(files[tile][0])
+
+    # extensión total
+    Xo = np.min(attributes.Xo)
+    Yf = np.max(attributes.Yf)
+    Xf = np.max(attributes.Xf)
+    Yo = np.min(attributes.Yo)
+    # nº total de columnas y filas
+    colsize = np.mean((attributes.Xf - attributes.Xo) / attributes.ncols)
+    ncols = int(round((Xf - Xo) / colsize, 0))
+    rowsize = np.mean((attributes.Yf - attributes.Yo) / attributes.nrows)
+    nrows = int(round((Yf - Yo) / rowsize, 0))
 
     # coordenadas x de las celdas
     Xmodis = np.linspace(Xo, Xf, ncols)
@@ -347,29 +500,43 @@ def MODIS_extract(path, product, var, atributes, factor=None, dateslim=None, cli
 
     # IMPORTAR DATOS
     # --------------
-    for i, file in enumerate(files):
-        if verbose is True:
-            print('Archivo {0:>3} de {1:>3}'.format(i + 1, len(files)), end='\r')
-        # cargar archivo 'hdf'
-        f = Dataset(path + file, format='hdf4')
-        # extraer datos de la variable
-        if clip is not None:  
-            tmp = f[var][maskRows, :][:, maskCols]
+    for t, tile in enumerate(tiles):
+        nc, nr, xo, yf, xf, yo = attributes.loc[tile, :]
+        i = int(round((Yf - yf) / (rowsize * attributes.nrows[t]), 0))
+        j = int(round((Xf - xf) / (colsize * attributes.ncols[t]), 0))
+
+        for fd, (file, date) in enumerate(zip(files[tile], dates[tile])):
+            # cargar archivo 'hdf'
+            d = Dataset(file, format='hdf4')
+            # extraer datos de la variable
+            tmp = d[var][:]
             tmp[tmp.mask] = np.nan
-            tmp[maskClip] = np.nan
+
+            # guardar datos en un array de la hoja
+            if fd == 0:
+                dataTile = tmp.data
+            else:
+                dataTile = np.dstack((dataTile, tmp.data))
+            del tmp
+
+        # guardar datos globales en un array
+        if t == 0:
+            data = dataTile.copy()
         else:
-            tmp = f[var][:]
-            tmp[tmp.mask] = np.nan
-        # guardar datos en un array
-        if i == 0:
-            data = tmp.data
-        else:
-            data = np.dstack((data, tmp.data))
-        del tmp
-        f.close()
+            if (i == 1) & (j == 0):
+                data = np.concatenate((data, dataTile), axis=0)
+            elif (i == 0) & (j == 1):
+                data = np.concatenate((data, dataTile), axis=1)
+        del dataTile
+
     if factor is not None:
         data *= factor
     
+    if clip is not None:
+        # recortar array global
+        data = data[maskRows, :][:, maskCols]
+        data[maskClip] = np.nan
+
     # GUARDAR RESULTADOS
     # ------------------
     MODIS_extract.data = data
@@ -382,7 +549,6 @@ def MODIS_extract(path, product, var, atributes, factor=None, dateslim=None, cli
         MODIS_extract.Ycoords = YYmodis
 
 
-# In[ ]:
 
 
 def plotMODISseries(data, var, timevar, r, ymin=None, ylabel=None, lw=.25, alpha=.1):
@@ -428,10 +594,3 @@ def plotMODISseries(data, var, timevar, r, ymin=None, ylabel=None, lw=.25, alpha
         ax.set(xlim=xlim, ylim=(ymin, ymax))
         ax.set_ylabel(ylabel, fontsize=13)
         ax.set_title(sat, fontsize=13, fontweight='bold');
-
-
-# In[ ]:
-
-
-
-
