@@ -406,7 +406,7 @@ def hdfAttrs(file):
 
 
 
-def MODIS_extract(path, product, var, factor=None, tiles=None, dateslim=None,
+def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
                   clip=None, coordsClip='epsg:25830', verbose=True):
     """Extrae los datos de MODIS para un producto, variable y fechas dadas, transforma las coordenadas y recorta a la zona de estudio.
     
@@ -416,7 +416,7 @@ def MODIS_extract(path, product, var, factor=None, tiles=None, dateslim=None,
     product:    string. Nombre del producto MODIS, p.ej. MOD16A2
     var:        string. Variable de interés dentro de los archivos 'hdf'
     factor:     float. Factor con el que multiplicar los datos para obtener su valore real (comprobar en la página de MODIS para el producto y variable de interés)
-    tiles:      list. Hojas del producto MODIS a tratar. Si es 'None', se extraen los datos para todas las hojas
+    tiles:      list. Hojas del producto MODIS a tratar
     dateslim:   list. Fechas de inicio y fin del periodo de estudio en formato YYYY-MM-DD. Si es 'None', se extraen los datos para todas las fechas disponibles
     clip:       string. Ruta y nombre del archivo ASCII que se utilizará como máscara para recortar los datos. Si es 'None', se extraen todos los datos
     coordsClip: string. Código EPSG o Proj del sistema de coordenadas al que se quieren transformar los datos. Si en 'None', se mantiene el sistema de coordenadas sinusoidal de MODIS
