@@ -558,11 +558,12 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
                 data = np.concatenate((data, dataTile), axis=1)
         del dataTile
 
+    # multiplicar por el factor de escala (si existe)
     if factor is not None:
         data *= factor
     
+    # recortar array global con la máscara
     if clip is not None:
-        # recortar array global
         data = data[maskRows, :][:, maskCols]
         data[maskClip] = np.nan
         
