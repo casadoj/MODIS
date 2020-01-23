@@ -457,10 +457,13 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
     # comprobar que el número de archivos es igual en todas las hojas
     if len(set([len(dates[tile]) for tile in tiles])) > 1:
         print('¡ERROR! Diferente número de fechas en las diferentes hojas')
-        return
+        MODIS_extract.files = files
+        MODIS_extract.dates = dates
+        return 
 
     # ATRIBUTOS MODIS
     # ---------------
+    if verbose == True: print('Generar atributos globales')
     # extraer atributos para cada hoja
     attributes = pd.DataFrame(index=tiles, columns=['ncols', 'nrows', 'Xo', 'Yf', 'Xf', 'Yo'])
     for tile in tiles:
@@ -476,6 +479,10 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
     ncols = int(round((Xf - Xo) / colsize, 0))
     rowsize = np.mean((attributes.Yf - attributes.Yo) / attributes.nrows)
     nrows = int(round((Yf - Yo) / rowsize, 0))
+    if verbose == True:
+        print('dimensión:\t\t({0:}, {1:})'.format(ncols, nrows))
+        print('esquina inf. izqda.:\t({0:>10.2f}, {1:>10.2f})'.format(Xo, Yo))
+        print('esquina sup. dcha.:\t({0:>10.2f}, {1:>10.2f})'.format(Xf, Yf), end='\n\n')
 
     # coordenadas x de las celdas
     Xmodis = np.linspace(Xo, Xf, ncols)
@@ -497,6 +504,7 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
     # CREAR MÁSCARAS
     # --------------
     if clip is not None:
+        if verbose == True: print('Crear máscaras')
         # cargar ascii
         clipdf = ascii2df(clip)
         # extensión del ascii
@@ -525,16 +533,22 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
                 aux[imodis, jmodis] = np.nan
                 maskClip = np.isnan(aux)
         if verbose == True:
-            print('nº filas: {0:>3}\tnº columnas: {1:>3}'.format(aux.shape[0], aux.shape[1]))
+            print('dimensión:\t\t({0:>4}, {1:>4})'.format(aux.shape[0], aux.shape[1]), end='\n\n')
 
+    
     # IMPORTAR DATOS
     # --------------
+    if verbose ==True: print('Importar datos')
     for t, tile in enumerate(tiles):
+        if verbose == True:
+            print('Hoja {0:>2} de {1:>2}: {2}'.format(t + 1, len(tiles), tile))
         nc, nr, xo, yf, xf, yo = attributes.loc[tile, :]
         i = int(round((Yf - yf) / (rowsize * attributes.nrows[t]), 0))
         j = int(round((Xf - xf) / (colsize * attributes.ncols[t]), 0))
 
         for fd, (file, date) in enumerate(zip(files[tile], dates[tile])):
+            if verbose == True:
+                print('Archivo {0:>3} de {1:>3}: {2}'.format(fd + 1, len(files[tile]), file), end='\r')
             # cargar archivo 'hdf'
             d = Dataset(file, format='hdf4')
             # extraer datos de la variable
@@ -547,6 +561,7 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
             else:
                 dataTile = np.dstack((dataTile, tmp.data))
             del tmp
+        if verbose == True: print()
 
         # guardar datos globales en un array
         if t == 0:
