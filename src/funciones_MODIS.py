@@ -425,7 +425,7 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
     Salidas:
     --------
     Como métodos:
-        data:    array (2D ó 3D). Mapas de la variable de interés. 3D si hay más de un archivo (más de una fecha)
+        data:    array (Y, X) o (dates, Y, X). Mapas de la variable de interés. 3D si hay más de un archivo (más de una fecha)
         Xcoords: array (2D). Coordenadas X de cada celda de los mapas de 'data'
         Ycoords: array (2D). Coordenadas Y de cada celda de los mapas de 'data'
         dates:   list. Fechas a las que corresponde cada uno de los maapas de 'data'
@@ -565,6 +565,14 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
         # recortar array global
         data = data[maskRows, :][:, maskCols]
         data[maskClip] = np.nan
+        
+    # reordenar el array (tiempo, Y, X)
+    if len(data.shape) == 3:
+        tmp = np.ones((data.shape[2], data.shape[0], data.shape[1])) * np.nan
+        for t in range(data.shape[2]):
+            tmp[t,:,:] = data[:,:,t]
+        data = tmp.copy()
+        del tmp
 
     # GUARDAR RESULTADOS
     # ------------------
