@@ -7,4 +7,4 @@ La organización del repositorio es la siguiente:
 * [_data_](https://github.com/casadoj/MODIS/tree/master/data) contiene los datos para el ejemplo de prueba en la cuenca del Deva.
 * [_docs_](https://github.com/casadoj/MODIS/tree/master/docs) contiene los _Jupyter notebooks_ para la descarga y análisis de los datos.
 * [_src_](https://github.com/casadoj/MODIS/tree/master/src) contiene el código fuente, es decir, los archivos _py_ con las funciones desarrolladas para poder ser usadas desde otros repositorios.
-* [ output_](https://github.com/casadoj/MODIS/tree/master/output) contiene las salidas del análisis. Se subdivide a su vez en carpetas para cada una de las variables estudiadas: evapotranspiración (ET), fracción de radiación fotosintéticamente activa y _leaf area index_ (FPAR/LAI) e índices de vegetación (VI.
+* [_output_](https://github.com/casadoj/MODIS/tree/master/output) contiene las salidas del análisis. Se subdivide a su vez en carpetas para cada una de las variables estudiadas: evapotranspiración (ET), fracción de radiación fotosintéticamente activa y _leaf area index_ (FPAR/LAI) e índices de vegetación (VI.
