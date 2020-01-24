@@ -45,6 +45,9 @@ from datetime import datetime, timedelta
 from pyproj import Proj, transform#, CRS
 os.environ['PROJ_LIB'] = r'C:\Anaconda3\pkgs\proj4-4.9.3-vc14_5\Library\share'
 
+import matplotlib.animation as animation
+from IPython.display import HTML
+
 url = 'https://raw.githubusercontent.com/casadoj/Calibrar/master/read_write.py'
 r = requests.get(url).text
 exec(r)
@@ -518,3 +521,45 @@ def plotMODISseries(data, var, timevar, r, ymin=None, ylabel=None, lw=.25, alpha
         ax.set(xlim=xlim, ylim=(ymin, ymax))
         ax.set_ylabel(ylabel, fontsize=13)
         ax.set_title(sat, fontsize=13, fontweight='bold');
+
+        
+def animate3Darray(data, dates, minmax, cblabel='', fps=2, dpi=100, pathfile=None):
+    """Crea una animación a partir de un 'array' 3D.
+    
+    Parámetros:
+    -----------
+    data:      array (tiempo, y, x)
+    dates:     list (tiempo). Fechas a las que corresponden cada uno de los mapas de 'data'
+    minmax:    list. Mínimo y máximo de la escala de colores
+    cblabel:   string. Etiqueta de la escala de colores
+    fps:       int. Imágenes por segundo
+    dpi:       int. Resolución en puntos por pulgada
+    pathfile:  string. Ruta, nombre y extensión donde guardar la animación. Por defecto es 'None y no se guarda
+    """
+    
+    # definir configuración del gráfico en blanco
+    fig, ax = plt.subplots(figsize=(5,5))
+    im = ax.imshow(np.zeros(data.shape[1:]), animated=True,
+                   cmap='summer_r', vmin=minmax[0], vmax=minmax[1])
+    plt.axis('off')
+    cb = plt.colorbar(im, shrink=.7)
+    cb.set_label(cblabel, fontsize=12)
+    title = ax.text(.5, 1.05, '', fontsize=13, fontweight='bold',
+                    transform=ax.transAxes, horizontalalignment='center')
+
+    def updatefig(i, *args):
+        """Función que define los zdatos a mostrar  el título en cada iteración"""
+        title.set_text(dates[i].date())
+        im.set_array(data[i,:,:])
+        return im,
+
+    # genera la animación iterando sobre 'updatefig' un número 'frames' de veces
+    ani = animation.FuncAnimation(fig, updatefig, frames=data.shape[0], interval=1000/fps,
+                                  blit=True)
+    # guardar vídeo
+    if pathfile is not None:
+        ani.save(pathfile, fps=fps, extra_args=['-vcodec', 'libx264'], dpi=dpi)
+    # plt.show()
+
+    # ver vídeo en el 'notebook'
+    return HTML(ani.to_html5_video())
