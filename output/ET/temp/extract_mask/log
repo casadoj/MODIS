@@ -1,0 +1,2 @@
+202001271237   0     0     0casadoj F:\Codigo\GitHub\MODIS\output\ET\temp\extract_mask = SELECTMASK(F:\Codigo\GitHub\MODIS\output\ET\temp\project, F:\Codigo\GitHub\MODIS\output\ET\temp\mask_project)
+202001271237   0     0     0casadoj F:\Codigo\GitHub\MODIS\output\ET\temp\MOD16A2_A2001001_h17v04.asc = GRIDASCII ( F:\Codigo\GitHub\MODIS\output\ET\temp\extract_ma

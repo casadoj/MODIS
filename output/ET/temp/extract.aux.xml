@@ -1,0 +1,14 @@
+<PAMDataset>
+  <Metadata>
+    <MDI key="DataType">Generic</MDI>
+  </Metadata>
+  <Metadata domain="Esri">
+    <MDI key="PyramidResamplingType">NEAREST</MDI>
+  </Metadata>
+  <PAMRasterBand band="1">
+    <Description>extractc1</Description>
+  </PAMRasterBand>
+  <PAMRasterBand band="2">
+    <Description>extractc2</Description>
+  </PAMRasterBand>
+</PAMDataset>
