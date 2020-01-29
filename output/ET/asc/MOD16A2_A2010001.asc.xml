@@ -1,2 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<metadata xml:lang="es"><Esri><CreaDate>20200128</CreaDate><CreaTime>18331200</CreaTime><ArcGISFormat>1.0</ArcGISFormat><SyncOnce>TRUE</SyncOnce><DataProperties><lineage><Process ToolSource="c:\program files (x86)\arcgis\desktop10.3\ArcToolbox\Toolboxes\Conversion Tools.tbx\RasterToASCII" Date="20200128" Time="183312">RasterToASCII F:/Codigo/GitHub/MODIS/output/ET/temp/Extract_mosa1 F:\Codigo\GitHub\MODIS\output\ET\asc\MOD16A2_A2010001.asc</Process></lineage></DataProperties></Esri></metadata>
