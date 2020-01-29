@@ -1,2 +1,2 @@
-202001281702   0     0     0casadoj F:\Codigo\GitHub\MODIS\output\ET\temp\Extract_mosa1 = SELECTMASK(F:\Codigo\GitHub\MODIS\output\ET\temp\mosaic_p, F:\Codigo\GitHub\MODIS\data\dem.asc)
-202001281702   0     0     0casadoj F:\Codigo\GitHub\MODIS\output\ET\asc\MOD16A2_A2019289.asc = GRIDASCII ( F:\Codigo\GitHub\MODIS\output\ET\temp\Extract_mosa1 )
+202001291012   0     1     0casadoj F:\Codigo\GitHub\MODIS\output\ET\temp\Extract_mosa1 = SELECTMASK(F:\Codigo\GitHub\MODIS\output\ET\temp\mosaic_p, F:\Codigo\GitHub\MODIS\data\dem.asc)
+202001291012   0     0     0casadoj F:\Codigo\GitHub\MODIS\output\ET\asc\MYD16A2_A2019289.asc = GRIDASCII ( F:\Codigo\GitHub\MODIS\output\ET\temp\Extract_mosa1 )

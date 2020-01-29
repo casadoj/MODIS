@@ -563,3 +563,153 @@ def animate3Darray(data, dates, minmax, cblabel='', fps=2, dpi=100, pathfile=Non
 
     # ver vídeo en el 'notebook'
     return HTML(ani.to_html5_video())
+
+
+
+def MODISfromASC(path, product, factor=None, fillValue=None):
+    """Lee los mapas de MODIS en formato ascii (generados mediante pyScripter) y genera un array único para todos los datos
+    
+    Parámetros:
+    -----------
+    path:      string. Ruta donde se encuentran los mapas en formato ASCII
+    product:   string. Producto MODIS a descargar
+    factor:    float. Factor corrector de los datos: https://lpdaac.usgs.gov/products/
+    fillVale:  list. Valor (o dos valores) correspondientes a NaN: https://lpdaac.usgs.gov/products/
+    
+    Salidas:
+    --------
+    En forma de métodos de la función:
+        data:  array (t,n,m). Datos de la variable de interés
+        dates: array (t). Fechas de cada uno de los mapas
+        Y:     array (n). Coordenadas Y de las filas
+        X:     array (m). Coordenadas X de las columnas
+    """
+    
+    # archivos ascii
+    ascFiles = [f for f in os.listdir(path) if ('asc' == f[-3:]) & (product.lower() in f)]
+    
+    dates = []
+    for f, file in enumerate(ascFiles):
+
+        print('Archivo {0:>3} de {1:>3}: {2}'.format(f + 1, len(ascFiles), file), end='\r')
+
+        # fecha del mapa
+        year = file.split('_')[1][1:5]
+        doy = file.split('_')[1][5:8]
+        dates.append(datetime.strptime(' '.join([year, doy]), '%Y %j').date())
+
+        # importar ascii
+        read_ascii(path + file)
+        aux = read_ascii.data
+        if f == 0:
+            attrs = read_ascii.attributes
+
+        # eliminar celdas con códigos correspondientes a Nan
+        if fillValue is not None:
+            if len(fillValue) == 1:
+                aux[aux == fillValue] = np.nan
+            elif len(fillValue) == 2:
+                for fill in range(fillValue[0], fillValue[1] + 1):
+                    aux[aux == fill] = np.nan
+            else:
+                print('¡ERROR! Longitud de "fillValue"')
+
+        # multiplicar por el factor correspondiente
+        aux *= factor
+
+        # convertir en NaN según la máscara
+        aux[aux.mask] = np.nan
+
+        # unir al 'array' con el resto de fechas
+        if f == 0:
+            data = aux.data
+        else:
+            data = np.dstack((data, aux.data))
+
+        del aux
+    dates = np.array(dates)
+    print()
+
+    # calcular media para # eliminar filas y columnas vacías
+    avg = np.nanmean(data, axis=2)
+    maskCols = np.all(np.isnan(avg), axis=0)
+    maskRows = np.all(np.isnan(avg), axis=1)
+    data = data[~maskRows,:][:,~maskCols]
+
+    # coordenadas x
+    x = np.arange(attrs[2], attrs[2] + attrs[0] * attrs[4] - 1, attrs[4])
+    x = x[~maskCols]
+    # coordenadas y
+    y = np.arange(attrs[3], attrs[3] + attrs[1] * attrs[4] - 1, attrs[4])
+    y = y[~maskRows]
+
+    # reordenar datos: (fechas, Y, X)
+    data = np.moveaxis(data, 2, 0)
+    print('dimensiones (fechas, y, x): {0}'.format(data.shape))
+    
+    # guardar resultados
+    MODISfromASC.data = data
+    MODISfromASC.dates = dates
+    MODISfromASC.Y = y
+    MODISfromASC.X = x
+
+    
+    
+    
+def MODISnc(pathfile, MODISdict, var, units):
+    """Genera un netCDF a partir de un diccionario con los datos MODIS correspondientes a una variable
+    
+    Parámetros:
+    -----------
+    pathfile:  string. Ruta, nombre y extensión del archivo netCDF a crear
+    MODISdict: dict. Diccionario en el que se guardan todos los datos modis de una variable. Ej: MODISdict{'Terra':  {var, 'dates', 'Y', 'X'}, 'Aqua':  {var, 'dates', 'Y', 'X'}}
+    var:       string. Nombre de la variable de estudio. P.ej.: 'ET' para evapotranspiración
+    units:     string. Unidades en las que se mide la variable
+    
+    Salidas:
+    --------
+    Archivo netCDF en 'pathfile'
+    """
+    
+    # definir el netcdf
+    ncMODIS = Dataset(pathfile, 'w', format='NETCDF4')
+    
+    # crear grupos
+    terra = ncMODIS.createGroup('Terra')
+    aqua = ncMODIS.createGroup('Aqua')
+
+    # crear atributos
+    ncMODIS.description = 'Serie temporal de mapas de ' + var + ' de la cuenca obtenidos a partir de MODIS'
+    ncMODIS.history = 'Creado el ' + datetime.now().date().strftime('%Y-%m-%d')
+    ncMODIS.source = 'https://e4ftl01.cr.usgs.gov/'
+    ncMODIS.coordinateSystem = 'epsg:25830' # ETRS89 30N
+
+    for group, sat in zip([terra, aqua], ['Terra', 'Aqua']):
+
+        # crear las dimensiones
+        time = group.createDimension('time', len(MODISdict[sat]['dates']))
+        Y = group.createDimension('Y', len(MODISdict[sat]['Y']))
+        X = group.createDimension('X', len(MODISdict[sat]['X']))
+
+        # crear variables
+        data = group.createVariable(var, 'f4', ('time', 'Y', 'X'))
+        data.units = units
+        times = group.createVariable('time', 'f8', ('time',))
+        times.units = 'días desde el 0001-01-01'
+        times.calendar = 'Gregoriano'
+        Xs = group.createVariable('X', 'u4', ('X',))
+        Xs.units = 'm'
+        Ys = group.createVariable('Y', 'u4', ('Y',))
+        Ys.units = 'm'
+
+        # variable
+        data[:,:,:] = MODISdict[sat][var][:,:,:]
+        # variable 'time'
+        deltas = [date - datetime(1, 1, 1).date() for date in MODISdict[sat]['dates']]
+        times[:] = [delta.days for delta in deltas]
+        # variable 'X'
+        Xs[:] = MODISdict[sat]['X']
+        # variable 'Y'
+        Ys[:] = MODISdict[sat]['Y']
+
+    ncMODIS.close()
