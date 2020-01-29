@@ -19,14 +19,14 @@ arcpy.CheckOutExtension('Spatial')
 
 # data required: MODIS product, tiles and dates
 var = 'ET'
-product = 'MOD16A2'
+product = 'MYD16A2'
 factor = 0.1
 tiles = ['h17v04']
 dateslim = None
 
 # paths
 pathMODIS = 'F:/Codigo/GitHub/MODIS/'
-pathData = pathMODIS + 'data/' + var + '/'
+pathData = 'F:/OneDrive - Universidad de Cantabria/Cartografia/MODIS/' + product + '/'
 pathTemp = pathMODIS + 'output/' + var + '/temp/'
 pathOutput = pathMODIS + 'output/' + var + '/asc/'
 
@@ -87,7 +87,7 @@ for d, date in enumerate(dates):
         if t < len(tiles) -1:
             inputs += ';'
     mosaic = pathTemp + "mosaic"
-    arcpy.MosaicToNewRaster_management(inputs, pathTemp, "mosaic", "", "8_BIT_UNSIGNED", "", "1", "LAST", "FIRST")
+    arcpy.MosaicToNewRaster_management(inputs, pathTemp, "mosaic", "", "16_BIT_SIGNED", "", "1", "LAST", "FIRST")
 
     # Process: Project Raster
     mosaic_ProjectRaster = pathTemp + "mosaic_p"

@@ -563,3 +563,269 @@ def animate3Darray(data, dates, minmax, cblabel='', fps=2, dpi=100, pathfile=Non
 
     # ver vídeo en el 'notebook'
     return HTML(ani.to_html5_video())
+
+
+
+def MODISfromASC(path, product, factor=None, fillValue=None):
+    """Lee los mapas de MODIS en formato ascii (generados mediante pyScripter) y genera un array único para todos los datos
+    
+    Parámetros:
+    -----------
+    path:      string. Ruta donde se encuentran los mapas en formato ASCII
+    product:   string. Producto MODIS a descargar
+    factor:    float. Factor corrector de los datos: https://lpdaac.usgs.gov/products/
+    fillVale:  list. Valor (o dos valores) correspondientes a NaN: https://lpdaac.usgs.gov/products/
+    
+    Salidas:
+    --------
+    En forma de métodos de la función:
+        data:  array (t,n,m). Datos de la variable de interés
+        dates: array (t). Fechas de cada uno de los mapas
+        Y:     array (n). Coordenadas Y de las filas
+        X:     array (m). Coordenadas X de las columnas
+    """
+    
+    # archivos ascii
+    ascFiles = [f for f in os.listdir(path) if ('asc' == f[-3:]) & (product.lower() in f)]
+    
+    dates = []
+    for f, file in enumerate(ascFiles):
+
+        print('Archivo {0:>3} de {1:>3}: {2}'.format(f + 1, len(ascFiles), file), end='\r')
+
+        # fecha del mapa
+        year = file.split('_')[1][1:5]
+        doy = file.split('_')[1][5:8]
+        dates.append(datetime.strptime(' '.join([year, doy]), '%Y %j').date())
+
+        # importar ascii
+        read_ascii(path + file)
+        aux = read_ascii.data
+        if f == 0:
+            attrs = read_ascii.attributes
+
+        # eliminar celdas con códigos correspondientes a Nan
+        if fillValue is not None:
+            if len(fillValue) == 1:
+                aux[aux == fillValue] = np.nan
+            elif len(fillValue) == 2:
+                for fill in range(fillValue[0], fillValue[1] + 1):
+                    aux[aux == fill] = np.nan
+            else:
+                print('¡ERROR! Longitud de "fillValue"')
+
+        # multiplicar por el factor correspondiente
+        aux *= factor
+
+        # convertir en NaN según la máscara
+        aux[aux.mask] = np.nan
+
+        # unir al 'array' con el resto de fechas
+        if f == 0:
+            data = aux.data
+        else:
+            data = np.dstack((data, aux.data))
+
+        del aux
+    dates = np.array(dates)
+    print()
+
+    # calcular media para # eliminar filas y columnas vacías
+    avg = np.nanmean(data, axis=2)
+    maskCols = np.all(np.isnan(avg), axis=0)
+    maskRows = np.all(np.isnan(avg), axis=1)
+    data = data[~maskRows,:][:,~maskCols]
+
+    # coordenadas x
+    x = np.arange(attrs[2], attrs[2] + attrs[0] * attrs[4] - 1, attrs[4])
+    x = x[~maskCols]
+    # coordenadas y
+    y = np.arange(attrs[3], attrs[3] + attrs[1] * attrs[4] - 1, attrs[4])
+    y = y[~maskRows]
+
+    # reordenar datos: (fechas, Y, X)
+    data = np.moveaxis(data, 2, 0)
+    print('dimensiones (fechas, y, x): {0}'.format(data.shape))
+    
+    # guardar resultados
+    MODISfromASC.data = data
+    MODISfromASC.dates = dates
+    MODISfromASC.Y = y
+    MODISfromASC.X = x
+
+    
+    
+    
+def MODISnc(pathfile, MODISdict, var, units):
+    """Genera un netCDF a partir de un diccionario con los datos MODIS correspondientes a una variable
+    
+    Parámetros:
+    -----------
+    pathfile:  string. Ruta, nombre y extensión del archivo netCDF a crear
+    MODISdict: dict. Diccionario en el que se guardan todos los datos modis de una variable. Ej: MODISdict{'Terra':  {var, 'dates', 'Y', 'X'}, 'Aqua':  {var, 'dates', 'Y', 'X'}}
+    var:       string. Nombre de la variable de estudio. P.ej.: 'ET' para evapotranspiración
+    units:     string. Unidades en las que se mide la variable
+    
+    Salidas:
+    --------
+    Archivo netCDF en 'pathfile'
+    """
+    
+    # definir el netcdf
+    ncMODIS = Dataset(pathfile, 'w', format='NETCDF4')
+    
+    # crear grupos
+    terra = ncMODIS.createGroup('Terra')
+    aqua = ncMODIS.createGroup('Aqua')
+
+    # crear atributos
+    ncMODIS.description = 'Serie temporal de mapas de ' + var + ' de la cuenca obtenidos a partir de MODIS'
+    ncMODIS.history = 'Creado el ' + datetime.now().date().strftime('%Y-%m-%d')
+    ncMODIS.source = 'https://e4ftl01.cr.usgs.gov/'
+    ncMODIS.coordinateSystem = 'epsg:25830' # ETRS89 30N
+
+    for group, sat in zip([terra, aqua], ['Terra', 'Aqua']):
+
+        # crear las dimensiones
+        time = group.createDimension('time', len(MODISdict[sat]['dates']))
+        Y = group.createDimension('Y', len(MODISdict[sat]['Y']))
+        X = group.createDimension('X', len(MODISdict[sat]['X']))
+
+        # crear variables
+        data = group.createVariable(var, 'f4', ('time', 'Y', 'X'))
+        data.units = units
+        times = group.createVariable('time', 'f8', ('time',))
+        times.units = 'días desde el 0001-01-01'
+        times.calendar = 'Gregoriano'
+        Xs = group.createVariable('X', 'u4', ('X',))
+        Xs.units = 'm'
+        Ys = group.createVariable('Y', 'u4', ('Y',))
+        Ys.units = 'm'
+
+        # variable
+        data[:,:,:] = MODISdict[sat][var][:,:,:]
+        # variable 'time'
+        deltas = [date - datetime(1, 1, 1).date() for date in MODISdict[sat]['dates']]
+        times[:] = [delta.days for delta in deltas]
+        # variable 'X'
+        Xs[:] = MODISdict[sat]['X']
+        # variable 'Y'
+        Ys[:] = MODISdict[sat]['Y']
+
+    ncMODIS.close()
+    
+    
+    
+    
+# AGREGAR DATOS MODIS
+# -------------------
+
+
+
+def mediaMensual(dates, Data):
+    """Calcula la media mensual interanual para cada mes del año
+    
+    Parámetros:
+    -----------
+    dates:     array (t). Fechas de cada uno de los mapas
+    Data:      array (t,n,m). Datos a agregar
+    
+    Salida:
+    -------
+    meanM:     array(12,n,m). Media mensual de la variable
+    """
+    
+    # medias mensuales
+    meanM = np.zeros((12, Data.shape[1], Data.shape[2])) * np.nan
+    for m, month in enumerate(range(1, 13)):
+        ks = [k for k, date in enumerate(dates) if date.month == month]
+        meanM[m,:,:] = np.nanmean(Data[ks,:,:], axis=0)
+        
+    return meanM
+
+
+
+
+def serieMensual(dates, Data):
+    """Calcula la serie mensual
+    
+    Parámetros:
+    -----------
+    dates:     array (t). Fechas de cada uno de los mapas
+    Data:      array (t,n,m). Datos a agregar
+    
+    Salida:
+    -------
+    serieM:    array (t',n,m). Mapas de la serie mensual
+    months:    array (t'). Fechas de los meses de la serie
+    """
+    
+    start = datetime(dates[0].year, dates[0].month, 1).date()
+    end = dates[-1] + timedelta(8)
+    end = datetime(end.year, end.month, monthrange(end.year, end.month)[1]).date()
+    days = pd.date_range(start, end)
+    months = pd.date_range(start, end, freq='M')
+    len(days), len(months)
+
+    # serie mensuales
+    serieM = np.zeros((len(months), Data.shape[1], Data.shape[2])) * np.nan
+    for i in range(Data.shape[1]):
+        for j in range(Data.shape[2]):
+            print('celda {0:>5} de {1:>5}'.format(i * Data.shape[2] + j + 1,
+                                                  Data.shape[1] * Data.shape[2]), end='\r')
+            if np.isnan(Data[:,i,j]).sum() == Data.shape[0]: # ningún dato en toda la serie
+                continue
+            else:
+                # generar serie diaria
+                auxd = pd.Series(index=days)
+                for k, (st, et) in enumerate(zip(dates, Data[:,i,j])):
+                    if np.isnan(et):
+                        continue
+                    else:
+                        if st != dates[-1]:
+                            en = dates[k+1]
+                        else:
+                            en = st + timedelta(8)
+                        auxd[st:en - timedelta(1)] = et / (en - st).days
+                # generar serie mensual
+                auxm = auxd.groupby([auxd.index.year, auxd.index.month]).agg(np.nanmean)
+                auxm.index = [datetime(idx[0], idx[1], monthrange(idx[0], idx[1])[1]).date() for idx in auxm.index]
+                # asignar serie mensual a su celda en el array 3D
+                serieM[:,i,j] = auxm.iloc[:serieM.shape[0]].copy()
+                del auxd, auxm
+    
+    return serieM, months
+
+
+
+
+def serieAnual(dates, Data):
+    """Calcula la serie anual
+    
+    Parámetros:
+    -----------
+    dates:     array (t). Fechas de cada uno de los mapas
+    Data:      array (t,n,m). Datos a agregar
+    
+    Salida:
+    -------
+    serieA:    array (t',n,m). Mapas de la serie anual
+    years:    array (t'). Fechas de los años de la serie"""
+    
+    # años con datos suficientes
+    years = np.unique(np.array([date.year for date in dates]))
+    ksyear = {}
+    for year in years:
+        ks = [k for k, date in enumerate(dates) if date.year == year]
+        if len(ks) < 40: # si faltan más de 5 mapas en un año 
+            years = years[years != year]
+            continue
+        else:
+            ksyear[year] = ks
+
+    # medias anuales        
+    serieA = np.zeros((len(years), Data.shape[1], Data.shape[2])) * np.nan
+    for y, year in enumerate(years):
+        serieA[y,:,:] = np.nanmean(Data[ksyear[year],:,:], axis=0) * 365 / 8
+        
+    return serieA, years
