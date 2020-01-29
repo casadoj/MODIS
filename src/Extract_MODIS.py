@@ -27,10 +27,13 @@ dateslim = None
 # paths
 pathMODIS = 'F:/Codigo/GitHub/MODIS/'
 pathData = 'F:/OneDrive - Universidad de Cantabria/Cartografia/MODIS/' + product + '/'
-pathOutput = pathData + 'asc/'
+pathOutput = 'F:/Cartografia/MODIS/' + product + '/'
 if os.path.exists(pathOutput) == False:
     os.makedirs(pathOutput)
-pathTemp = 'C:/Users/casadoj/Documents/ArcGIS/Default.gdb/'
+#pathTemp = 'C:/Users/casadoj/Documents/ArcGIS/Default.gdb/'
+pathTemp = 'F:/Cartografia/MODIS/temp/'
+if os.path.exists(pathTemp) == False:
+    os.makedirs(pathTemp)
 
 # DEM
 mdt = pathMODIS + 'data/dem.asc'
@@ -66,6 +69,13 @@ dates = np.sort(np.unique(np.array([date for tile in tiles for date in dates[til
 # extract and manage data
 for d, date in enumerate(dates):
     dateStr = str(date.year) + str(date.timetuple().tm_yday).zfill(3)
+    print(dateStr)
+
+    # outFile
+    outFile = product.lower() + '_a' + dateStr + '.asc'
+    print(outFile)
+    if os.path.exists(pathOutput + outFile):
+        continue
 
     hdfs = {}
     for t, tile in enumerate(tiles):
@@ -83,13 +93,16 @@ for d, date in enumerate(dates):
         #arcpy.DefineProjection_management(hdfs[tile], coordsMODIS)
 
     # Process: Mosaic To New Raster
-    inputs = ''
-    for t in range(len(tiles)):
-        inputs += pathTemp + 'tile' + str(t)
-        if t < len(tiles) -1:
-            inputs += ';'
-    mosaic = pathTemp + "mosaic"
-    arcpy.MosaicToNewRaster_management(inputs, pathTemp, "mosaic", "", "16_BIT_SIGNED", "", "1", "LAST", "FIRST")
+    if len(tiles) > 1:
+        inputs = ''
+        for t in range(len(tiles)):
+            inputs += pathTemp + 'tile' + str(t)
+            if t < len(tiles) -1:
+                inputs += ';'
+        mosaic = pathTemp + "mosaic"
+        arcpy.MosaicToNewRaster_management(inputs, pathTemp, "mosaic", "", "16_BIT_SIGNED", "", "1", "LAST", "FIRST")
+    else:
+        mosaic = pathTemp + 'tile0'
 
     # Process: Project Raster
     rasterPrj = pathTemp + "rasterPrj"
@@ -100,7 +113,10 @@ for d, date in enumerate(dates):
     arcpy.gp.ExtractByMask_sa(rasterPrj, mdt, rasterExt)
 
     # Process: Raster to ASCII (2)
-    output = pathOutput + file[:16].replace('.', '_') + '.asc'
-    arcpy.RasterToASCII_conversion(rasterExt, output)
+    outFile = pathOutput + file[:16].replace('.', '_') + '.asc'
+    arcpy.RasterToASCII_conversion(rasterExt, outFile)
+
+    #for f in os.listdir(pathTemp):
+    #    os.remove(f)
 
 
