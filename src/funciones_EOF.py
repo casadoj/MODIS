@@ -53,6 +53,7 @@ import matplotlib.pyplot as plt
 # plt.style.use('seaborn-whitegrid')
 plt.style.use('dark_background')
 get_ipython().run_line_magic('matplotlib', 'inline')
+from matplotlib.gridspec import GridSpec
 
 from netCDF4 import Dataset
 # import h5py

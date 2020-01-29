@@ -713,3 +713,119 @@ def MODISnc(pathfile, MODISdict, var, units):
         Ys[:] = MODISdict[sat]['Y']
 
     ncMODIS.close()
+    
+    
+    
+    
+# AGREGAR DATOS MODIS
+# -------------------
+
+
+
+def mediaMensual(dates, Data):
+    """Calcula la media mensual interanual para cada mes del año
+    
+    Parámetros:
+    -----------
+    dates:     array (t). Fechas de cada uno de los mapas
+    Data:      array (t,n,m). Datos a agregar
+    
+    Salida:
+    -------
+    meanM:     array(12,n,m). Media mensual de la variable
+    """
+    
+    # medias mensuales
+    meanM = np.zeros((12, Data.shape[1], Data.shape[2])) * np.nan
+    for m, month in enumerate(range(1, 13)):
+        ks = [k for k, date in enumerate(dates) if date.month == month]
+        meanM[m,:,:] = np.nanmean(Data[ks,:,:], axis=0)
+        
+    return meanM
+
+
+
+
+def serieMensual(dates, Data):
+    """Calcula la serie mensual
+    
+    Parámetros:
+    -----------
+    dates:     array (t). Fechas de cada uno de los mapas
+    Data:      array (t,n,m). Datos a agregar
+    
+    Salida:
+    -------
+    serieM:    array (t',n,m). Mapas de la serie mensual
+    months:    array (t'). Fechas de los meses de la serie
+    """
+    
+    start = datetime(dates[0].year, dates[0].month, 1).date()
+    end = dates[-1] + timedelta(8)
+    end = datetime(end.year, end.month, monthrange(end.year, end.month)[1]).date()
+    days = pd.date_range(start, end)
+    months = pd.date_range(start, end, freq='M')
+    len(days), len(months)
+
+    # serie mensuales
+    serieM = np.zeros((len(months), Data.shape[1], Data.shape[2])) * np.nan
+    for i in range(Data.shape[1]):
+        for j in range(Data.shape[2]):
+            print('celda {0:>5} de {1:>5}'.format(i * Data.shape[2] + j + 1,
+                                                  Data.shape[1] * Data.shape[2]), end='\r')
+            if np.isnan(Data[:,i,j]).sum() == Data.shape[0]: # ningún dato en toda la serie
+                continue
+            else:
+                # generar serie diaria
+                auxd = pd.Series(index=days)
+                for k, (st, et) in enumerate(zip(dates, Data[:,i,j])):
+                    if np.isnan(et):
+                        continue
+                    else:
+                        if st != dates[-1]:
+                            en = dates[k+1]
+                        else:
+                            en = st + timedelta(8)
+                        auxd[st:en - timedelta(1)] = et / (en - st).days
+                # generar serie mensual
+                auxm = auxd.groupby([auxd.index.year, auxd.index.month]).agg(np.nanmean)
+                auxm.index = [datetime(idx[0], idx[1], monthrange(idx[0], idx[1])[1]).date() for idx in auxm.index]
+                # asignar serie mensual a su celda en el array 3D
+                serieM[:,i,j] = auxm.iloc[:serieM.shape[0]].copy()
+                del auxd, auxm
+    
+    return serieM, months
+
+
+
+
+def serieAnual(dates, Data):
+    """Calcula la serie anual
+    
+    Parámetros:
+    -----------
+    dates:     array (t). Fechas de cada uno de los mapas
+    Data:      array (t,n,m). Datos a agregar
+    
+    Salida:
+    -------
+    serieA:    array (t',n,m). Mapas de la serie anual
+    years:    array (t'). Fechas de los años de la serie"""
+    
+    # años con datos suficientes
+    years = np.unique(np.array([date.year for date in dates]))
+    ksyear = {}
+    for year in years:
+        ks = [k for k, date in enumerate(dates) if date.year == year]
+        if len(ks) < 40: # si faltan más de 5 mapas en un año 
+            years = years[years != year]
+            continue
+        else:
+            ksyear[year] = ks
+
+    # medias anuales        
+    serieA = np.zeros((len(years), Data.shape[1], Data.shape[2])) * np.nan
+    for y, year in enumerate(years):
+        serieA[y,:,:] = np.nanmean(Data[ksyear[year],:,:], axis=0) * 365 / 8
+        
+    return serieA, years
