@@ -19,16 +19,18 @@ arcpy.CheckOutExtension('Spatial')
 
 # data required: MODIS product, tiles and dates
 var = 'ET'
-product = 'MYD16A2'
-factor = 0.1
+product = 'MOD13A1'
+#factor = 0.1
 tiles = ['h17v04']
 dateslim = None
 
 # paths
 pathMODIS = 'F:/Codigo/GitHub/MODIS/'
 pathData = 'F:/OneDrive - Universidad de Cantabria/Cartografia/MODIS/' + product + '/'
-pathTemp = pathMODIS + 'output/' + var + '/temp/'
-pathOutput = pathMODIS + 'output/' + var + '/asc/'
+pathOutput = pathData + 'asc/'
+if os.path.exists(pathOutput) == False:
+    os.makedirs(pathOutput)
+pathTemp = 'C:/Users/casadoj/Documents/ArcGIS/Default.gdb/'
 
 # DEM
 mdt = pathMODIS + 'data/dem.asc'
@@ -90,15 +92,15 @@ for d, date in enumerate(dates):
     arcpy.MosaicToNewRaster_management(inputs, pathTemp, "mosaic", "", "16_BIT_SIGNED", "", "1", "LAST", "FIRST")
 
     # Process: Project Raster
-    mosaic_ProjectRaster = pathTemp + "mosaic_p"
-    arcpy.ProjectRaster_management(mosaic, mosaic_ProjectRaster, coordsOut, "NEAREST", "463.3127165275 463.3127165275", "", "", "")
+    rasterPrj = pathTemp + "rasterPrj"
+    arcpy.ProjectRaster_management(mosaic, rasterPrj, coordsOut, "NEAREST", "463.3127165275 463.3127165275", "", "", "")
 
     # Process: Extract by Mask
-    Extract_mosa1 = pathTemp + "Extract_mosa1"
-    arcpy.gp.ExtractByMask_sa(mosaic_ProjectRaster, mdt, Extract_mosa1)
+    rasterExt = pathTemp + "rasterExt"
+    arcpy.gp.ExtractByMask_sa(rasterPrj, mdt, rasterExt)
 
     # Process: Raster to ASCII (2)
     output = pathOutput + file[:16].replace('.', '_') + '.asc'
-    arcpy.RasterToASCII_conversion(Extract_mosa1, output)
+    arcpy.RasterToASCII_conversion(rasterExt, output)
 
 
