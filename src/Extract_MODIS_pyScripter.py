@@ -19,7 +19,7 @@ arcpy.CheckOutExtension('Spatial')
 
 # data required: MODIS product, tiles and dates
 var = 'ET'
-product = 'MOD13A1'
+product = 'MYD13A1'
 #factor = 0.1
 tiles = ['h17v04']
 dateslim = None
@@ -32,8 +32,11 @@ if os.path.exists(pathOutput) == False:
     os.makedirs(pathOutput)
 #pathTemp = 'C:/Users/casadoj/Documents/ArcGIS/Default.gdb/'
 pathTemp = 'F:/Cartografia/MODIS/temp/'
-if os.path.exists(pathTemp) == False:
-    os.makedirs(pathTemp)
+if os.path.exists(pathTemp):
+    #Cleanup
+    arcpy.Delete_management(pathTemp)
+os.makedirs(pathTemp)
+
 
 # DEM
 mdt = pathMODIS + 'data/dem.asc'
@@ -119,4 +122,5 @@ for d, date in enumerate(dates):
     #for f in os.listdir(pathTemp):
     #    os.remove(f)
 
+arcpy.Delete_management(pathTemp)
 

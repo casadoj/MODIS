@@ -485,7 +485,7 @@ def plotMODISseries(data, var, timevar, r, ymin=None, ylabel=None, lw=.25, alpha
     ---------
     data:    dict. Contiene los datos de 'Terra' y 'Aqua' en la variable 'var' para las fechas en la variable 'timevar'
     var:     string. Nombre de la variable de interés dentro de 'data'
-    timevar: string. Nombre de la variable deentro de 'data' que contiene las fechas
+    timevar: string. Nombre de la variable dentro de 'data' que contiene las fechas
     ymin:    boolean. Si se quiere calcular el mínimo del eje Y (True), o se fija en 0 (False)
     r:       string. Redondeo
     ylabel:  string. Etiqueta del eje y
