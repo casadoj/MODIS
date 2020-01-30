@@ -501,14 +501,14 @@ def plotMODISseries(data, var, timevar, r, src=['Terra', 'Aqua'], ymin=None, yla
     xlim = [min(min(data[src[0]][timevar]), min(data[src[1]][timevar])),
             max(max(data[src[0]][timevar]), max(data[src[1]][timevar]))]
     if ymin == True:
-        ymin = np.floor(min([np.nanmin(data[sat][var]) for sat in data.keys()]) / r) * r
+        ymin = np.floor(min([np.nanmin(data[s][var]) for s in src]) / r) * r
     else:
         ymin = 0
-    ymax = np.ceil(max([np.nanmax(data[sat][var]) for sat in data.keys()]) / r) * r
+    ymax = np.ceil(max([np.nanmax(data[s][var]) for s in src]) / r) * r
     colors = [['yellowgreen', 'darkolivegreen'], ['lightsteelblue', 'steelblue']]
 
-    for c, (ax, sat) in enumerate(zip(axes, [src[0], src[1]])):
-        timex, datax = data[sat][timevar], data[sat][var]
+    for c, (ax, s) in enumerate(zip(axes, src)):
+        timex, datax = data[s][timevar], data[s][var]
         for i in range(datax.shape[1]):
             for j in range(datax.shape[2]):
                 if np.all(np.isnan(datax[:,i,j])): # celda vacía
@@ -522,7 +522,7 @@ def plotMODISseries(data, var, timevar, r, src=['Terra', 'Aqua'], ymin=None, yla
         ax.tick_params(labelsize=11)
         ax.set(xlim=xlim, ylim=(ymin, ymax))
         ax.set_ylabel(ylabel, fontsize=13)
-        ax.set_title(sat, fontsize=13, fontweight='bold');
+        ax.set_title(s, fontsize=13, fontweight='bold');
 
         
 def animate3Darray(data, dates, minmax, cblabel='', fps=2, dpi=100, pathfile=None):
