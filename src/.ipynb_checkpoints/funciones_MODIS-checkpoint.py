@@ -41,6 +41,7 @@ get_ipython().run_line_magic('matplotlib', 'inline')
 from netCDF4 import Dataset
 # import h5py
 from datetime import datetime, timedelta
+from calendar import monthrange
 
 from pyproj import Proj, transform#, CRS
 os.environ['PROJ_LIB'] = r'C:\Anaconda3\pkgs\proj4-4.9.3-vc14_5\Library\share'
@@ -510,7 +511,7 @@ def plotMODISseries(data, var, timevar, r, src=['Terra', 'Aqua'], ymin=None, yla
         timex, datax = data[sat][timevar], data[sat][var]
         for i in range(datax.shape[1]):
             for j in range(datax.shape[2]):
-                if np.isnan(datax[:,i,j]).sum() == datax.shape[0]: # celda vacía
+                if np.all(np.isnan(datax[:,i,j])): # celda vacía
                     continue
                 else:
                     # serie de una celda
