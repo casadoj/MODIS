@@ -478,16 +478,17 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
 
 
 
-def plotMODISseries(data, var, timevar, r, ymin=None, ylabel=None, lw=.25, alpha=.1):
+def plotMODISseries(data, var, timevar, r, src=['Terra', 'Aqua'], ymin=None, ylabel=None, lw=.25, alpha=.1):
     """Figura con un gráfico de línea para Terra y otro para Aqua con la serie temporal de data.
     
     Entradas:
     ---------
-    data:    dict. Contiene los datos de 'Terra' y 'Aqua' en la variable 'var' para las fechas en la variable 'timevar'
+    data:    dict. Contiene los datos de las fuentes ('Terra' y 'Aqua') en la variable 'var' para las fechas en la variable 'timevar'
     var:     string. Nombre de la variable de interés dentro de 'data'
     timevar: string. Nombre de la variable dentro de 'data' que contiene las fechas
     ymin:    boolean. Si se quiere calcular el mínimo del eje Y (True), o se fija en 0 (False)
     r:       string. Redondeo
+    src:     list of strings. Fuentes de los datos; son las 'keys' del diccionario data. Por defecto son 'Terra' y 'Aqua'
     ylabel:  string. Etiqueta del eje y
     lw:      float. Grosor de línea
     alpha:   float. Transparencia
@@ -496,8 +497,8 @@ def plotMODISseries(data, var, timevar, r, ymin=None, ylabel=None, lw=.25, alpha
     # mostrar la serie 8-diaria para cada celda y la media de la cuenca
     fig, axes = plt.subplots(nrows=2, figsize=(15, 7), sharex=True)
 
-    xlim = [min(min(data['Terra'][timevar]), min(data['Aqua'][timevar])),
-            max(max(data['Terra'][timevar]), max(data['Aqua'][timevar]))]
+    xlim = [min(min(data[src[0]][timevar]), min(data[src[1]][timevar])),
+            max(max(data[src[0]][timevar]), max(data[src[1]][timevar]))]
     if ymin == True:
         ymin = np.floor(min([np.nanmin(data[sat][var]) for sat in data.keys()]) / r) * r
     else:
@@ -505,7 +506,7 @@ def plotMODISseries(data, var, timevar, r, ymin=None, ylabel=None, lw=.25, alpha
     ymax = np.ceil(max([np.nanmax(data[sat][var]) for sat in data.keys()]) / r) * r
     colors = [['yellowgreen', 'darkolivegreen'], ['lightsteelblue', 'steelblue']]
 
-    for c, (ax, sat) in enumerate(zip(axes, ['Terra', 'Aqua'])):
+    for c, (ax, sat) in enumerate(zip(axes, [src[0], src[1]])):
         timex, datax = data[sat][timevar], data[sat][var]
         for i in range(datax.shape[1]):
             for j in range(datax.shape[2]):
