@@ -763,14 +763,20 @@ def serieMensual(dates, Data, agg='mean'):
     months:    array (t'). Fechas de los meses de la serie
     """
     
+    # paso temporal de la serie original
+    At = np.round(np.mean([d.days for d in np.diff(dates)]), 1)
     # serie de meses
-    start = datetime(dates[0].year, dates[0].month, 1).date()
-    end = dates[-1] + timedelta(8)
-    end = datetime(end.year, end.month, monthrange(end.year, end.month)[1]).date()
+    if At == 1:
+        start = datetime(dates[0].year, dates[0].month, dates[0].day).date()
+        end = datetime(dates[-1].year, dates[-1].month, dates[-1].day).date()
+    else:
+        start = datetime(dates[0].year, dates[0].month, 1).date()
+        end = dates[-1] + timedelta(At)
+        end = datetime(end.year, end.month, monthrange(end.year, end.month)[1]).date()
     days = pd.date_range(start, end)
     months = pd.date_range(start, end, freq='M')
     
-    # serie mensuales
+    # SERIE MENSUAL
     serieM = np.zeros((len(months), Data.shape[1], Data.shape[2])) * np.nan
     for i in range(Data.shape[1]):
         for j in range(Data.shape[2]):
@@ -779,21 +785,25 @@ def serieMensual(dates, Data, agg='mean'):
             if np.isnan(Data[:,i,j]).sum() == Data.shape[0]: # ningún dato en toda la serie
                 continue
             else:
-                # generar serie diaria
-                auxd = pd.Series(index=days)
-                for k, (st, et) in enumerate(zip(dates, Data[:,i,j])):
-                    if np.isnan(et):
-                        continue
-                    else:
-                        if st != dates[-1]:
-                            en = dates[k+1]
+                if At > 1: # si la serie original no es diaria
+                    # generar serie diaria
+                    auxd = pd.Series(index=days)
+                    for k, (st, et) in enumerate(zip(dates, Data[:,i,j])):
+                        if np.isnan(et):
+                            continue
                         else:
-                            en = st + timedelta(8)
-                        auxd[st:en - timedelta(1)] = et / (en - st).days
+                            if st != dates[-1]:
+                                en = dates[k+1]
+                            else:
+                                en = st + timedelta(At)
+                            auxd[st:en - timedelta(1)] = et / (en - st).days
+                else: # si la serie original es diaria
+                    auxd = pd.Series(data=Data[:,i,j], index=days)
                 # generar serie mensual
-                auxm = auxd.groupby([auxd.index.year, auxd.index.month]).agg(np.nanmean)
-                if agg == 'sum':
-                    auxm *= 30 / 8
+                if agg == 'mean':
+                    auxm = auxd.groupby([auxd.index.year, auxd.index.month]).agg(np.nanmean)
+                elif agg == 'sum':
+                    auxm = auxd.groupby([auxd.index.year, auxd.index.month]).agg(np.nansum)
                 auxm.index = [datetime(idx[0], idx[1], monthrange(idx[0], idx[1])[1]).date() for idx in auxm.index]
                 # asignar serie mensual a su celda en el array 3D
                 serieM[:,i,j] = auxm.iloc[:serieM.shape[0]].copy()
