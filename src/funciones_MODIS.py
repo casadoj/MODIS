@@ -748,13 +748,14 @@ def mediaMensual(dates, Data):
 
 
 
-def serieMensual(dates, Data):
+def serieMensual(dates, Data, agg='mean'):
     """Calcula la serie mensual
     
     Parámetros:
     -----------
     dates:     array (t). Fechas de cada uno de los mapas
     Data:      array (t,n,m). Datos a agregar
+    agg:       string. Tipo de agregación mensual: 'mean', media diaria; 'sum' suma mensual (ET)
     
     Salida:
     -------
@@ -762,13 +763,13 @@ def serieMensual(dates, Data):
     months:    array (t'). Fechas de los meses de la serie
     """
     
+    # serie de meses
     start = datetime(dates[0].year, dates[0].month, 1).date()
     end = dates[-1] + timedelta(8)
     end = datetime(end.year, end.month, monthrange(end.year, end.month)[1]).date()
     days = pd.date_range(start, end)
     months = pd.date_range(start, end, freq='M')
-    len(days), len(months)
-
+    
     # serie mensuales
     serieM = np.zeros((len(months), Data.shape[1], Data.shape[2])) * np.nan
     for i in range(Data.shape[1]):
@@ -791,6 +792,8 @@ def serieMensual(dates, Data):
                         auxd[st:en - timedelta(1)] = et / (en - st).days
                 # generar serie mensual
                 auxm = auxd.groupby([auxd.index.year, auxd.index.month]).agg(np.nanmean)
+                if agg == 'sum':
+                    auxm *= 30 / 8
                 auxm.index = [datetime(idx[0], idx[1], monthrange(idx[0], idx[1])[1]).date() for idx in auxm.index]
                 # asignar serie mensual a su celda en el array 3D
                 serieM[:,i,j] = auxm.iloc[:serieM.shape[0]].copy()
