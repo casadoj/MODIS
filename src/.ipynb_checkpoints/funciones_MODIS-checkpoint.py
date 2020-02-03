@@ -724,13 +724,15 @@ def MODISnc(pathfile, MODISdict, var, units):
 
 
 
-def mediaMensual(dates, Data):
+def mediaMensual(months, Data):
     """Calcula la media mensual interanual para cada mes del año
     
     Parámetros:
     -----------
-    dates:     array (t). Fechas de cada uno de los mapas
-    Data:      array (t,n,m). Datos a agregar
+    months:     array (t). Fecha correspondiente de cada uno de los mapas mensuales
+    Data:      array (t,n,m). Datos la serie de mapas mensuales
+    
+    Ambos parámetros de entrada son las salidas de 'serieMensual'
     
     Salida:
     -------
@@ -740,7 +742,7 @@ def mediaMensual(dates, Data):
     # medias mensuales
     meanM = np.zeros((12, Data.shape[1], Data.shape[2])) * np.nan
     for m, month in enumerate(range(1, 13)):
-        ks = [k for k, date in enumerate(dates) if date.month == month]
+        ks = [k for k, date in enumerate(months) if date.month == month]
         meanM[m,:,:] = np.nanmean(Data[ks,:,:], axis=0)
         
     return meanM
@@ -771,8 +773,7 @@ def serieMensual(dates, Data, agg='mean'):
         end = datetime(dates[-1].year, dates[-1].month, dates[-1].day).date()
     else:
         start = datetime(dates[0].year, dates[0].month, 1).date()
-        end = dates[-1] + timedelta(At)
-        end = datetime(end.year, end.month, monthrange(end.year, end.month)[1]).date()
+        end = datetime(dates[-1].year, dates[-1].month, monthrange(dates[-1].year, dates[-1].month)[1]).date()
     days = pd.date_range(start, end)
     months = pd.date_range(start, end, freq='M')
     
@@ -794,9 +795,10 @@ def serieMensual(dates, Data, agg='mean'):
                         else:
                             if st != dates[-1]:
                                 en = dates[k+1]
+                                auxd[st:en - timedelta(1)] = et / (en - st).days
                             else:
                                 en = st + timedelta(At)
-                            auxd[st:en - timedelta(1)] = et / (en - st).days
+                                auxd[st:end - timedelta(1)] = et / (en - st).days
                 else: # si la serie original es diaria
                     auxd = pd.Series(data=Data[:,i,j], index=days)
                 # generar serie mensual
