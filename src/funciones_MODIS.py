@@ -775,7 +775,7 @@ def serieMensual(dates, Data, agg='mean'):
         start = datetime(dates[0].year, dates[0].month, 1).date()
         end = datetime(dates[-1].year, dates[-1].month, monthrange(dates[-1].year, dates[-1].month)[1]).date()
     days = pd.date_range(start, end)
-    months = pd.date_range(start, end, freq='M')
+    months = [m.date() for m in pd.date_range(start, end, freq='M')]
     
     # SERIE MENSUAL
     serieM = np.zeros((len(months), Data.shape[1], Data.shape[2])) * np.nan
