@@ -525,7 +525,7 @@ def plotMODISseries(data, var, timevar, r, src=['Terra', 'Aqua'], ymin=None, yla
         ax.set_title(s, fontsize=13, fontweight='bold');
 
         
-def animate3Darray(data, dates, minmax, cblabel='', fps=2, dpi=100, pathfile=None):
+def animate3Darray(data, dates, minmax, cblabel='', cmap='summer_r', fps=2, dpi=100, pathfile=None):
     """Crea una animación a partir de un 'array' 3D.
     
     Parámetros:
@@ -534,6 +534,7 @@ def animate3Darray(data, dates, minmax, cblabel='', fps=2, dpi=100, pathfile=Non
     dates:     list (tiempo). Fechas a las que corresponden cada uno de los mapas de 'data'
     minmax:    list. Mínimo y máximo de la escala de colores
     cblabel:   string. Etiqueta de la escala de colores
+    cmap:      string. Mapa de color
     fps:       int. Imágenes por segundo
     dpi:       int. Resolución en puntos por pulgada
     pathfile:  string. Ruta, nombre y extensión donde guardar la animación. Por defecto es 'None y no se guarda
@@ -542,7 +543,7 @@ def animate3Darray(data, dates, minmax, cblabel='', fps=2, dpi=100, pathfile=Non
     # definir configuración del gráfico en blanco
     fig, ax = plt.subplots(figsize=(5,5))
     im = ax.imshow(np.zeros(data.shape[1:]), animated=True,
-                   cmap='summer_r', vmin=minmax[0], vmax=minmax[1])
+                   cmap=cmap, vmin=minmax[0], vmax=minmax[1])
     plt.axis('off')
     cb = plt.colorbar(im, shrink=.7)
     cb.set_label(cblabel, fontsize=12)
@@ -617,7 +618,8 @@ def MODISfromASC(path, product, factor=None, fillValue=None):
                 print('¡ERROR! Longitud de "fillValue"')
 
         # multiplicar por el factor correspondiente
-        aux *= factor
+        if factor is not None:
+            aux *= factor
 
         # convertir en NaN según la máscara
         aux[aux.mask] = np.nan
@@ -658,7 +660,7 @@ def MODISfromASC(path, product, factor=None, fillValue=None):
     
     
     
-def MODISnc(pathfile, MODISdict, var, units):
+def MODISnc(pathfile, MODISdict, var, units, sats=['Terra', 'Aqua']):
     """Genera un netCDF a partir de un diccionario con los datos MODIS correspondientes a una variable
     
     Parámetros:
@@ -667,6 +669,7 @@ def MODISnc(pathfile, MODISdict, var, units):
     MODISdict: dict. Diccionario en el que se guardan todos los datos modis de una variable. Ej: MODISdict{'Terra':  {var, 'dates', 'Y', 'X'}, 'Aqua':  {var, 'dates', 'Y', 'X'}}
     var:       string. Nombre de la variable de estudio. P.ej.: 'ET' para evapotranspiración
     units:     string. Unidades en las que se mide la variable
+    sats:      list of strings. Nombres de los satélites. Por defecto hay dos productos para los satélites 'Terra' y 'Aqua'
     
     Salidas:
     --------
@@ -675,10 +678,6 @@ def MODISnc(pathfile, MODISdict, var, units):
     
     # definir el netcdf
     ncMODIS = Dataset(pathfile, 'w', format='NETCDF4')
-    
-    # crear grupos
-    terra = ncMODIS.createGroup('Terra')
-    aqua = ncMODIS.createGroup('Aqua')
 
     # crear atributos
     ncMODIS.description = 'Serie temporal de mapas de ' + var + ' de la cuenca obtenidos a partir de MODIS'
@@ -686,8 +685,10 @@ def MODISnc(pathfile, MODISdict, var, units):
     ncMODIS.source = 'https://e4ftl01.cr.usgs.gov/'
     ncMODIS.coordinateSystem = 'epsg:25830' # ETRS89 30N
 
-    for group, sat in zip([terra, aqua], ['Terra', 'Aqua']):
-
+    for sat in sats:
+        # crear grupo
+        group = ncMODIS.createGroup(sat)
+        
         # crear las dimensiones
         time = group.createDimension('time', len(MODISdict[sat]['dates']))
         Y = group.createDimension('Y', len(MODISdict[sat]['Y']))
@@ -775,7 +776,7 @@ def serieMensual(dates, Data, agg='mean'):
         start = datetime(dates[0].year, dates[0].month, 1).date()
         end = datetime(dates[-1].year, dates[-1].month, monthrange(dates[-1].year, dates[-1].month)[1]).date()
     days = pd.date_range(start, end)
-    months = pd.date_range(start, end, freq='M')
+    months = [m.date() for m in pd.date_range(start, end, freq='M')]
     
     # SERIE MENSUAL
     serieM = np.zeros((len(months), Data.shape[1], Data.shape[2])) * np.nan
