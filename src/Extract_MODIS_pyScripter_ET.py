@@ -18,8 +18,8 @@ arcpy.env.overwriteOutput = True
 arcpy.CheckOutExtension('Spatial')
 
 # data required: MODIS product, tiles and dates
-var = 'ET'
-product = 'MYD13A1'
+var = 'NDVI'
+product = 'MOD16A2'
 #factor = 0.1
 tiles = ['h17v04']
 dateslim = None
