@@ -35,7 +35,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 plt.style.use('seaborn-whitegrid')
-plt.style.use('dark_background')
+#plt.style.use('dark_background')
 get_ipython().run_line_magic('matplotlib', 'inline')
 
 from netCDF4 import Dataset
@@ -43,7 +43,9 @@ from netCDF4 import Dataset
 from datetime import datetime, timedelta
 from calendar import monthrange
 
-from pyproj import Proj, transform#, CRS
+from pyproj import Transformer
+from pyproj import CRS
+#from pyproj import Proj, transform#, CRS
 os.environ['PROJ_LIB'] = r'C:\Anaconda3\pkgs\proj4-4.9.3-vc14_5\Library\share'
 
 import matplotlib.animation as animation
@@ -278,11 +280,11 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
     path:       string. Ruta donde se encuentran los datos de MODIS (ha de haber una subcarpeta para cada producto)
     product:    string. Nombre del producto MODIS, p.ej. MOD16A2
     var:        string. Variable de interés dentro de los archivos 'hdf'
-    factor:     float. Factor con el que multiplicar los datos para obtener su valore real (comprobar en la página de MODIS para el producto y variable de interés)
+    factor:     float. Factor con el que multiplicar los datos para obtener su valor real (comprobar en la página de MODIS para el producto y variable de interés)
     tiles:      list. Hojas del producto MODIS a tratar
     dateslim:   list. Fechas de inicio y fin del periodo de estudio en formato YYYY-MM-DD. Si es 'None', se extraen los datos para todas las fechas disponibles
     clip:       string. Ruta y nombre del archivo ASCII que se utilizará como máscara para recortar los datos. Si es 'None', se extraen todos los datos
-    coordsClip: string. Código EPSG o Proj del sistema de coordenadas al que se quieren transformar los datos. Si en 'None', se mantiene el sistema de coordenadas sinusoidal de MODIS
+    coordsClip: pyproj.CRS. Proj del sistema de coordenadas al que se quieren transformar los datos. Si en 'None', se mantiene el sistema de coordenadas sinusoidal de MODIS
     verbose:    boolean. Si se quiere mostrar en pantalla el desarrollo de la función
     
     Salidas:
@@ -294,7 +296,8 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
         dates:   list. Fechas a las que corresponde cada uno de los maapas de 'data'
     """    
     
-
+    if os.path.exists(path + product + '/') is False:
+        os.makedirs(path + product + '/')
     os.chdir(path + product + '/')
     
     # SELECCIÓN DE ARCHIVOS
@@ -326,13 +329,13 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
 #         return 
     else:
         dates = np.sort(np.unique(np.array([date for tile in tiles for date in dates[tile]])))
-        if verbose == True:
+        if verbose:
             print('Seleccionar archivos')
             print('nº de archivos (fechas): {0:>3}'.format(len(dates)), end='\n\n')
 
     # ATRIBUTOS MODIS
     # ---------------
-    if verbose == True: print('Generar atributos globales')
+    if verbose: print('Generar atributos globales')
     # extraer atributos para cada hoja
     attributes = pd.DataFrame(index=tiles, columns=['ncols', 'nrows', 'Xo', 'Yf', 'Xf', 'Yo'])
     for tile in tiles:
@@ -361,13 +364,15 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
     XXmodis, YYmodis = np.meshgrid(Xmodis, Ymodis)
 
     if coordsClip is not None:
-        # definir sistemas de referencia de coordenadas
-        ProjOut = Proj(init=coordsClip)
+        ## definir sistemas de referencia de coordenadas
+        # ProjOut = Proj(init=coordsClip)
         # https://spatialreference.org/ref/sr-org/modis-sinusoidal/
-        SINUSOIDAL = Proj(projparams='PROJCS["Sinusoidal",GEOGCS["GCS_Undefined",DATUM["D_Undefined",SPHEROID["User_Defined_Spheroid",6371007.181,0.0]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.017453292519943295]],PROJECTION["Sinusoidal"],PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",0.0],UNIT["Meter",1.0]]')
+        sinusoidal = CRS.from_proj4('+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +a=6371007.181 +b=6371007.181 +units=m +no_defs ')
+        #SINUSOIDAL = Proj(projparams='PROJCS["Sinusoidal",GEOGCS["GCS_Undefined",DATUM["D_Undefined",SPHEROID["User_Defined_Spheroid",6371007.181,0.0]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.017453292519943295]],PROJECTION["Sinusoidal"],PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",0.0],UNIT["Meter",1.0]]')
+        project = Transformer.from_crs(sinusoidal, coordsClip)
 
         # transformar coordenadas
-        Xmodis, Ymodis = transform(SINUSOIDAL, ProjOut, XXmodis.flatten(), YYmodis.flatten())
+        Xmodis, Ymodis = project.transform(XXmodis.flatten(), YYmodis.flatten())
         XXmodis, YYmodis = Xmodis.reshape((nrows, ncols)), Ymodis.reshape((nrows, ncols))
 
     # CREAR MÁSCARAS
@@ -408,7 +413,7 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
 
     # IMPORTAR DATOS
     # --------------
-    if verbose ==True: print('Importar datos')
+    if verbose: print('Importar datos')
         
     for d, date in enumerate(dates):
         dateStr = str(date.year) + str(date.timetuple().tm_yday).zfill(3)
@@ -428,6 +433,7 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
             hdf = Dataset(file, format='hdf4')
             # extraer datos de la variable
             tmp = hdf[var][:]
+            tmp = tmp.astype(float)
             tmp[tmp.mask] = np.nan
             hdf.close()
             # guardar datos en un array global de la fecha
@@ -479,7 +485,7 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
 
 
 
-def plotMODISseries(data, var, timevar, r, src=['Terra', 'Aqua'], ymin=None, ylabel=None, lw=.25, alpha=.1):
+def plotMODISseries(data, var, timevar, src=['Terra', 'Aqua'], **kwargs):
     """Figura con un gráfico de línea para Terra y otro para Aqua con la serie temporal de data.
     
     Entradas:
@@ -487,13 +493,21 @@ def plotMODISseries(data, var, timevar, r, src=['Terra', 'Aqua'], ymin=None, yla
     data:    dict. Contiene los datos de las fuentes ('Terra' y 'Aqua') en la variable 'var' para las fechas en la variable 'timevar'
     var:     string. Nombre de la variable de interés dentro de 'data'
     timevar: string. Nombre de la variable dentro de 'data' que contiene las fechas
-    ymin:    boolean. Si se quiere calcular el mínimo del eje Y (True), o se fija en 0 (False)
-    r:       string. Redondeo
     src:     list of strings. Fuentes de los datos; son las 'keys' del diccionario data. Por defecto son 'Terra' y 'Aqua'
-    ylabel:  string. Etiqueta del eje y
-    lw:      float. Grosor de línea
-    alpha:   float. Transparencia
+    
+    kwargs:     r:       int or float. Redondeo
+                ymin:    boolean. Si se quiere calcular el mínimo del eje Y (True), o se fija en 0 (False)
+                ylabel:  string. Etiqueta del eje y
+                lw:      float. Grosor de línea
+                alpha:   float. Transparencia
     """
+    
+    # extraer kwargs
+    r = kwargs.get('r', 1)
+    ymin = kwargs.get('ymin', 0)
+    ylabel = kwargs.get('ylabel', '')
+    lw = kwargs.get('lw', .25)
+    alpha = kwargs.get('alpha', .1)
     
     # mostrar la serie 8-diaria para cada celda y la media de la cuenca
     fig, axes = plt.subplots(nrows=2, figsize=(15, 7), sharex=True)
