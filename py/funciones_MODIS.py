@@ -34,29 +34,38 @@ from bs4 import BeautifulSoup
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-plt.style.use('seaborn-whitegrid')
+#plt.style.use('seaborn-whitegrid')
 #plt.style.use('dark_background')
-get_ipython().run_line_magic('matplotlib', 'inline')
+#get_ipython().run_line_magic('matplotlib', 'inline')
 
 from netCDF4 import Dataset
 # import h5py
 from datetime import datetime, timedelta
 from calendar import monthrange
 
-from pyproj import Transformer
-from pyproj import CRS
+from pyproj import Transformer, CRS
 #from pyproj import Proj, transform#, CRS
 os.environ['PROJ_LIB'] = r'C:\Anaconda3\pkgs\proj4-4.9.3-vc14_5\Library\share'
+# sistema de coordenadas de MODIS
+sinusoidal = CRS.from_proj4('+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +a=6371007.181 +b=6371007.181 +units=m +no_defs ')
 
+from matplotlib.colors import ListedColormap, BoundaryNorm
+import matplotlib.patches as mpatches
+import matplotlib.patheffects as pe
 import matplotlib.animation as animation
 from IPython.display import HTML
 
-url = 'https://raw.githubusercontent.com/casadoj/Calibrar/master/read_write.py'
+url = 'https://raw.githubusercontent.com/casadoj/Calibrar/master/py/read_write.py'
 r = requests.get(url).text
 exec(r)
 
-
-
+#url = 'https://github.com/casadoj/Calibrar/blob/Snow-DDM/py/funciones_raster.py'
+#r = requests.get(url).text
+#exec(r)
+pathOrig = os.getcwd()
+os.chdir(os.path.join(pathOrig, '../../Calibrar/py/'))
+from funciones_raster import *
+os.chdir(pathOrig)
 
 # DESCARGA DE DATOS MODIS
 # -----------------------
@@ -485,15 +494,12 @@ def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None,
 
 
 
-def plotMODISseries(data, var, timevar, src=['Terra', 'Aqua'], **kwargs):
+def plotMODISseries(MODIS, **kwargs):
     """Figura con un gráfico de línea para Terra y otro para Aqua con la serie temporal de data.
     
     Entradas:
     ---------
-    data:    dict. Contiene los datos de las fuentes ('Terra' y 'Aqua') en la variable 'var' para las fechas en la variable 'timevar'
-    var:     string. Nombre de la variable de interés dentro de 'data'
-    timevar: string. Nombre de la variable dentro de 'data' que contiene las fechas
-    src:     list of strings. Fuentes de los datos; son las 'keys' del diccionario data. Por defecto son 'Terra' y 'Aqua'
+    MODIS:   dict. Contiene los datos de las fuentes ('Terra' y 'Aqua') como objetos raster3D
     
     kwargs:     r:       int or float. Redondeo
                 ymin:    boolean. Si se quiere calcular el mínimo del eje Y (True), o se fija en 0 (False)
@@ -502,41 +508,44 @@ def plotMODISseries(data, var, timevar, src=['Terra', 'Aqua'], **kwargs):
                 alpha:   float. Transparencia
     """
     
+
     # extraer kwargs
     r = kwargs.get('r', 1)
     ymin = kwargs.get('ymin', 0)
     ylabel = kwargs.get('ylabel', '')
     lw = kwargs.get('lw', .25)
     alpha = kwargs.get('alpha', .1)
-    
-    # mostrar la serie 8-diaria para cada celda y la media de la cuenca
-    fig, axes = plt.subplots(nrows=2, figsize=(15, 7), sharex=True)
+    figsize = kwargs.get('figsize', (15, 7))
 
-    xlim = [min(min(data[src[0]][timevar]), min(data[src[1]][timevar])),
-            max(max(data[src[0]][timevar]), max(data[src[1]][timevar]))]
+    # mostrar la serie 8-diaria para cada celda y la media de la cuenca
+    fig, axes = plt.subplots(nrows=2, figsize=figsize, sharex=True)
+
+    xlim = [min([min(MODIS[sat].times) for sat in MODIS]),
+            max([max(MODIS[sat].times) for sat in MODIS])]
     if ymin == True:
-        ymin = np.floor(min([np.nanmin(data[s][var]) for s in src]) / r) * r
+        ymin = np.floor(min([np.nanmin(MODIS[sat].data) for sat in MODIS]) / r) * r
     else:
         ymin = 0
-    ymax = np.ceil(max([np.nanmax(data[s][var]) for s in src]) / r) * r
+    ymax = np.ceil(max([np.nanmax(MODIS[sat].data) for sat in MODIS]) / r) * r
+    
     colors = [['yellowgreen', 'darkolivegreen'], ['lightsteelblue', 'steelblue']]
 
-    for c, (ax, s) in enumerate(zip(axes, src)):
-        timex, datax = data[s][timevar], data[s][var]
+    for c, (ax, sat) in enumerate(zip(axes, MODIS)):
+        timex, datax = MODIS[sat].times, MODIS[sat].data
         for i in range(datax.shape[1]):
             for j in range(datax.shape[2]):
                 if np.all(np.isnan(datax[:,i,j])): # celda vacía
                     continue
                 else:
                     # serie de una celda
-                    ax.plot(timex, datax[:, i,j], lw=lw, c=colors[c][0], alpha=alpha)
+                    ax.plot(timex, datax[:,i,j], lw=lw, c=colors[c][0], alpha=alpha)
         # serie media areal
         ax.plot(timex, np.nanmean(datax, axis=(1, 2)), c=colors[c][1], lw=4*lw)
         # configuración
         ax.tick_params(labelsize=11)
         ax.set(xlim=xlim, ylim=(ymin, ymax))
         ax.set_ylabel(ylabel, fontsize=13)
-        ax.set_title(s, fontsize=13, fontweight='bold');
+        ax.set_title(sat, fontsize=13, fontweight='bold');
 
         
 def animate3Darray(data, dates, minmax, cblabel='', cmap='summer_r', fps=2, dpi=100, pathfile=None):
@@ -739,83 +748,86 @@ def MODISnc(pathfile, MODISdict, var, units, sats=['Terra', 'Aqua']):
 
 
 
-def mediaMensual(months, Data):
+def mediaMensual(modis):
     """Calcula la media mensual interanual para cada mes del año
     
     Parámetros:
     -----------
-    months:     array (t). Fecha correspondiente de cada uno de los mapas mensuales
-    Data:      array (t,n,m). Datos la serie de mapas mensuales
-    
-    Ambos parámetros de entrada son las salidas de 'serieMensual'
+    modis:     raster3D (t,n,m)
     
     Salida:
     -------
-    meanM:     array(12,n,m). Media mensual de la variable
+    meanM:     raster3D (12,n,m). Media mensual de la variable
     """
     
     # medias mensuales
-    meanM = np.zeros((12, Data.shape[1], Data.shape[2])) * np.nan
+    meanM = np.zeros((12, *modis.data.shape[1:])) * np.nan
     for m, month in enumerate(range(1, 13)):
-        ks = [k for k, date in enumerate(months) if date.month == month]
-        meanM[m,:,:] = np.nanmean(Data[ks,:,:], axis=0)
+        ks = [k for k, time in enumerate(modis.times) if time.month == month]
+        meanM[m,:,:] = np.nanmean(modis.data[ks,:,:], axis=0)
+    
+    # guardar como raster3D
+    meanM = raster3D(meanM, modis.X, modis.Y, np.arange(1, 13), modis.units, modis.variable, modis.label, modis.crs)
         
     return meanM
 
 
 
 
-def serieMensual(dates, Data, agg='mean'):
+def serieMensual(modis, agg='mean'):
     """Calcula la serie mensual
     
     Parámetros:
     -----------
-    dates:     array (t). Fechas de cada uno de los mapas
-    Data:      array (t,n,m). Datos a agregar
+    modis:     raster3D (t,n,m).
     agg:       string. Tipo de agregación mensual: 'mean', media diaria; 'sum' suma mensual (ET)
     
     Salida:
     -------
-    serieM:    array (t',n,m). Mapas de la serie mensual
-    months:    array (t'). Fechas de los meses de la serie
+    serieM:    raster3D (t',n,m). Mapas de la serie mensual
     """
     
+    # extraer información de 'modis'
+    times = modis.times
+    data = modis.data
+
     # paso temporal de la serie original
-    At = np.round(np.mean([d.days for d in np.diff(dates)]), 1)
+    At = np.round(np.mean([d.days for d in np.diff(times)]), 1)
+
     # serie de meses
     if At == 1:
-        start = datetime(dates[0].year, dates[0].month, dates[0].day).date()
-        end = datetime(dates[-1].year, dates[-1].month, dates[-1].day).date()
+        start = datetime(times[0].year, times[0].month, times[0].day).date()
+        end = datetime(times[-1].year, times[-1].month, times[-1].day).date()
     else:
-        start = datetime(dates[0].year, dates[0].month, 1).date()
-        end = datetime(dates[-1].year, dates[-1].month, monthrange(dates[-1].year, dates[-1].month)[1]).date()
+        start = datetime(times[0].year, times[0].month, 1).date()
+        end = datetime(times[-1].year, times[-1].month, monthrange(times[-1].year, times[-1].month)[1]).date()
     days = pd.date_range(start, end)
     months = [m.date() for m in pd.date_range(start, end, freq='M')]
-    
+
     # SERIE MENSUAL
-    serieM = np.zeros((len(months), Data.shape[1], Data.shape[2])) * np.nan
-    for i in range(Data.shape[1]):
-        for j in range(Data.shape[2]):
-            print('celda {0:>5} de {1:>5}'.format(i * Data.shape[2] + j + 1,
-                                                  Data.shape[1] * Data.shape[2]), end='\r')
-            if np.isnan(Data[:,i,j]).sum() == Data.shape[0]: # ningún dato en toda la serie
+    serieM = np.zeros((len(months), *data.shape[1:])) * np.nan
+    for i in range(data.shape[1]):
+        for j in range(data.shape[2]):
+            print('celda {0:>5} de {1:>5}'.format(i * data.shape[2] + j + 1,
+                                                  data.shape[1] * data.shape[2]), end='\r')
+            if np.isnan(data[:,i,j]).sum() == data.shape[0]: # ningún dato en toda la serie
                 continue
             else:
                 if At > 1: # si la serie original no es diaria
                     # generar serie diaria
                     auxd = pd.Series(index=days)
-                    for k, (st, et) in enumerate(zip(dates, Data[:,i,j])):
+                    for k, (st, et) in enumerate(zip(times, data[:,i,j])):
                         if np.isnan(et):
                             continue
                         else:
-                            if st != dates[-1]:
-                                en = dates[k+1]
+                            if st != times[-1]:
+                                en = times[k+1]
                                 auxd[st:en - timedelta(1)] = et / (en - st).days
                             else:
                                 en = st + timedelta(At)
                                 auxd[st:end - timedelta(1)] = et / (en - st).days
                 else: # si la serie original es diaria
-                    auxd = pd.Series(data=Data[:,i,j], index=days)
+                    auxd = pd.Series(data=data[:,i,j], index=days)
                 # generar serie mensual
                 if agg == 'mean':
                     auxm = auxd.groupby([auxd.index.year, auxd.index.month]).agg(np.nanmean)
@@ -825,39 +837,563 @@ def serieMensual(dates, Data, agg='mean'):
                 # asignar serie mensual a su celda en el array 3D
                 serieM[:,i,j] = auxm.iloc[:serieM.shape[0]].copy()
                 del auxd, auxm
-    
-    return serieM, months
+
+    serieM = raster3D(serieM, modis.X, modis.Y, months, modis.units, modis.variable,
+                      modis.label, modis.crs)
+
+    return serieM
 
 
 
 
-def serieAnual(dates, Data):
+def serieAnual(modis, agg='mean', threshold=40):
     """Calcula la serie anual
     
     Parámetros:
     -----------
-    dates:     array (t). Fechas de cada uno de los mapas
-    Data:      array (t,n,m). Datos a agregar
+    modis:     raster3D (t,n,m)
     
     Salida:
     -------
-    serieA:    array (t',n,m). Mapas de la serie anual
-    years:    array (t'). Fechas de los años de la serie"""
+    serieA:    raster3D (t',n,m). Mapas de la serie anual
+    """
     
-    # años con datos suficientes
-    years = np.unique(np.array([date.year for date in dates]))
-    ksyear = {}
-    for year in years:
-        ks = [k for k, date in enumerate(dates) if date.year == year]
-        if len(ks) < 40: # si faltan más de 5 mapas en un año 
-            years = years[years != year]
-            continue
-        else:
-            ksyear[year] = ks
-
-    # medias anuales        
-    serieA = np.zeros((len(years), Data.shape[1], Data.shape[2])) * np.nan
+    # extraer información de 'modis'
+    times = modis.times
+    data = modis.data
+    
+    # años con datos
+    years = np.unique(np.array([date.year for date in times]))
+    
+    # serie anual
+    serieA = np.zeros((len(years), *data.shape[1:])) * np.nan
     for y, year in enumerate(years):
-        serieA[y,:,:] = np.nanmean(Data[ksyear[year],:,:], axis=0) * 365 / 8
+        maskT = [t for t, time in enumerate(times) if time.year == year]
+        nT = len(maskT)
+        if nT > threshold: # si no faltan más de 46 - 'threhsold' mapas en un año
+            mean = np.nanmean(data[maskT,:,:], axis=0)
+            if agg == 'sum':
+                count = np.sum(~np.isnan(data[maskT,:,:]), axis=0)
+                serieA[y,:,:] = mean * count
+            elif agg == 'mean':
+                serieA[y,:,:] = mean
+        else: # si faltan más de 46 - 'threhsold' mapas en un año 
+            serieA[y,:,:] = np.zeros((1, *data.shape[1:])) * np.nan
+            
+    # guardar como raster3D
+    serieA = raster3D(serieA, modis.X, modis.Y, years, modis.units, modis.variable, modis.label,
+                      modis.crs)
+    
+    return serieA
+
+
+
+def MODIS_extract(path, product, var, tiles, factor=None, dateslim=None, extent=None, verbose=True):
+    """Extrae los datos de MODIS para un producto, variable y fechas dadas, transforma las coordenadas y recorta a la zona de estudio.
+    
+    Entradas:
+    ---------
+    path:       string. Ruta donde se encuentran los datos de MODIS (ha de haber una subcarpeta para cada producto)
+    product:    string. Nombre del producto MODIS, p.ej. MOD16A2
+    var:        string. Variable de interés dentro de los archivos 'hdf'
+    factor:     float. Factor con el que multiplicar los datos para obtener su valor real (comprobar en la página de MODIS para el producto y variable de interés)
+    tiles:      list. Hojas del producto MODIS a tratar
+    dateslim:   list. Fechas de inicio y fin del periodo de estudio en formato YYYY-MM-DD. Si es 'None', se extraen los datos para todas las fechas disponibles
+    clip:       string. Ruta y nombre del archivo ASCII que se utilizará como máscara para recortar los datos. Si es 'None', se extraen todos los datos
+    coordsClip: pyproj.CRS. Proj del sistema de coordenadas al que se quieren transformar los datos. Si en 'None', se mantiene el sistema de coordenadas sinusoidal de MODIS
+    verbose:    boolean. Si se quiere mostrar en pantalla el desarrollo de la función
+    
+    Salidas:
+    --------
+    Como métodos:
+        data:    array (Y, X) o (dates, Y, X). Mapas de la variable de interés. 3D si hay más de un archivo (más de una fecha)
+        Xcoords: array (2D). Coordenadas X de cada celda de los mapas de 'data'
+        Ycoords: array (2D). Coordenadas Y de cada celda de los mapas de 'data'
+        dates:   list. Fechas a las que corresponde cada uno de los maapas de 'data'
+    """    
+    
+    if os.path.exists(path + product + '/') is False:
+        os.makedirs(path + product + '/')
+    os.chdir(path + product + '/')
+    
+    # SELECCIÓN DE ARCHIVOS
+    # ---------------------
+    if dateslim is not None:
+        # convertir fechas límite en datetime.date
+        start = datetime.strptime(dateslim[0], '%Y-%m-%d').date()
+        end = datetime.strptime(dateslim[1], '%Y-%m-%d').date()
+    
+    dates, files = {tile: [] for tile in tiles}, {tile: [] for tile in tiles}
+    for tile in tiles:
+        # seleccionar archivos del producto para las hojas y fechas indicadas
+        for file in [f for f in os.listdir() if (product in f) & (tile in f)]:
+            year = file.split('.')[1][1:5]
+            doy = file.split('.')[1][5:]
+            date = datetime.strptime(' '.join([year, doy]), '%Y %j').date()
+            if dateslim is not None:
+                if (date>= start) & (date <= end):
+                    dates[tile].append(date)
+                    files[tile].append(file)
+            else:
+                dates[tile].append(date)
+                files[tile].append(file)
+    # comprobar que el número de archivos es igual en todas las hojas
+    if len(set([len(dates[tile]) for tile in tiles])) > 1:
+        print('¡ERROR! Diferente número de fechas en las diferentes hojas')
+        MODIS_extract.files = files
+        MODIS_extract.dates = dates
+        return 
+    else:
+        dates = np.sort(np.unique(np.array([date for tile in tiles for date in dates[tile]])))
+        if verbose:
+            print('Seleccionar archivos')
+            print('nº de archivos (fechas): {0:>3}'.format(len(dates)), end='\n\n')
+
+    # ATRIBUTOS MODIS
+    # ---------------
+    if verbose:
+        print('Generar atributos globales')
+    # extraer atributos para cada hoja
+    attributes = pd.DataFrame(index=tiles, columns=['ncols', 'nrows', 'Xo', 'Yf', 'Xf', 'Yo'])
+    for tile in tiles:
+        attributes.loc[tile,:] = hdfAttrs(files[tile][0])
+
+    # extensión total
+    Xo = np.min(attributes.Xo)
+    Yf = np.max(attributes.Yf)
+    Xf = np.max(attributes.Xf)
+    Yo = np.min(attributes.Yo)
+    # nº total de columnas y filas
+    colsize = np.mean((attributes.Xf - attributes.Xo) / attributes.ncols)
+    ncols = int(round((Xf - Xo) / colsize, 0))
+    rowsize = np.mean((attributes.Yf - attributes.Yo) / attributes.nrows)
+    nrows = int(round((Yf - Yo) / rowsize, 0))
+    if verbose == True:
+        print('dimensión:\t\t({0:}, {1:})'.format(ncols, nrows))
+        print('esquina inf. izqda.:\t({0:>10.2f}, {1:>10.2f})'.format(Xo, Yo))
+        print('esquina sup. dcha.:\t({0:>10.2f}, {1:>10.2f})'.format(Xf, Yf), end='\n\n')
+
+    # coordenadas x de las celdas
+    Xmodis = np.linspace(Xo, Xf, ncols)
+    # coordenadas y de las celdas
+    Ymodis = np.linspace(Yf, Yo, nrows)
         
-    return serieA, years
+    # CREAR MÁSCARAS
+    # --------------
+    if extent is not None:
+        if verbose == True:
+            print('Crear máscaras')
+            
+        # crear máscara según la extensión
+        left, right, bottom, top =  extent
+        maskCols = (Xmodis >= left) & (Xmodis <= right)
+        maskRows = (Ymodis >= bottom) & (Ymodis <= top)
+        
+        # recortar coordenadas
+        Xmodis = Xmodis[maskCols]
+        Ymodis = Ymodis[maskRows]
+        
+        if verbose == True:
+            print('dimensión:\t\t({0:>4}, {1:>4})'.format(len(Ymodis), len(Xmodis)))
+            print('esquina inf. izqda.:\t({0:>10.2f}, {1:>10.2f})'.format(Xmodis.min(), Ymodis.min()))
+        print('esquina sup. dcha.:\t({0:>10.2f}, {1:>10.2f})'.format(Xmodis.max(), Ymodis.max()),
+              end='\n\n')
+
+    # IMPORTAR DATOS
+    # --------------
+    if verbose:
+        print('Importar datos')
+        
+    for d, date in enumerate(dates):
+        dateStr = str(date.year) + str(date.timetuple().tm_yday).zfill(3)
+
+        for t, tile in enumerate(tiles):
+            print('Fecha {0:>2} de {1:>2}: {2}\t||\tTile {3:>2} de {4:>2}: {5}'.format(d + 1, len(dates), date,
+                                                                                       t + 1, len(tiles), tile), end='\r')
+            
+            # localización de la hoja dentro del total de hojas
+            nc, nr, xo, yf, xf, yo = attributes.loc[tile, :]
+            i = int(round((Yf - yf) / (rowsize * attributes.nrows[t]), 0))
+            j = int(round((Xf - xf) / (colsize * attributes.ncols[t]), 0))
+
+            # archivo de la fecha y hoja dada
+            file = [f for f in files[tile] if dateStr in f][0]
+            # cargar archivo 'hdf'
+            hdf = Dataset(file, format='hdf4')
+            # extraer datos de la variable
+            tmp = hdf[var][:]
+            tmp = tmp.astype(float)
+            tmp[tmp.mask] = np.nan
+            hdf.close()
+            # guardar datos en un array global de la fecha
+            if t == 0:
+                dataD = tmp.copy()
+            else:
+                if (i == 1) & (j == 0):
+                    dataD = np.concatenate((dataD, tmp), axis=0)
+                elif (i == 0) & (j == 1):
+                    dataD = np.concatenate((dataD, tmp), axis=1)
+            del tmp
+        
+        # recortar array de la fecha con la máscara
+        if extent is not None:
+            dataD = dataD[maskRows, :][:, maskCols]
+            
+        # guardar datos en un array total
+        if d == 0:
+            data = dataD.copy()
+        else:
+            data = np.dstack((data, dataD))
+        del dataD
+    print()
+    
+    # multiplicar por el factor de escala (si existe)
+    if factor is not None:
+        data *= factor
+        
+    # reordenar el array (tiempo, Y, X)
+    if len(data.shape) == 3:
+        tmp = np.ones((data.shape[2], data.shape[0], data.shape[1])) * np.nan
+        for t in range(data.shape[2]):
+            tmp[t,:,:] = data[:,:,t]
+        data = tmp.copy()
+        del tmp
+
+    # GUARDAR RESULTADOS
+    # ------------------
+    modis = raster3D(data, Xmodis, Ymodis, dates, crs=sinusoidal)
+    
+    return modis
+
+
+# ### video
+
+# In[1]:
+
+
+def video(raster, cuenca, cmap, norm, DEM=None, fps=2, dpi=600, export=False, **kwargs):
+    """Crea un vídeo con la predicción de HARMONIE.
+
+    Entradas:
+    ---------
+    raster:     class raster3D
+    cuenca:     geodataframe. Polígonos de las cuencas
+    cmap:       
+    norm:
+    DEM:        class raster2D. Mapa de elevación
+    fps:        int. 'frames per seconds'. Número de pasos temporales a mostrar por segundo
+    dpi:        int. 'dots per inch'. Resolución del mapa
+    export:     boolean. Si se quiere exportar la figura como mp4
+
+    kwargs:
+                figsize:    list (,). Tamaño de la figura. Por defecto (16, 7)
+                color:      string. Color con el que definir los límites de las provincias. Por defecto es blanco
+                dateformat: string. Formato de las fechas en la figura. Por defecto '%d-%m-%Y %H:%M'
+                extent:     tuple [O, E, S, N]. Límites espaciales de la figura. Por defecto 'None'
+                rutaExport: string. Carpeta donde guardar el pdf. Por defecto '../output/'
+
+    Salidas:
+    --------
+    Mapas diarios
+    Si 'export == True', se exporta un pdf con el nombre 'label_pasada.mp4'. Por ejemplo, 'APCP_2020113000.mp4'
+    """
+
+    # extraer datos del raster
+    data, X, Y, times = raster.data, raster.X, raster.Y, raster.times
+
+    # extraer kwargs
+    figsize = kwargs.get('figsize', (16, 3.75))#(17, 3.5)
+    color = kwargs.get('color', 'k')
+    dateformat = kwargs.get('dateformat', '%d-%m-%Y')
+    extent = kwargs.get('extent', raster.extent())
+    rutaExport = kwargs.get('rutaExport', '../output/')
+
+    # definir configuración del gráfico en blanco
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # título del gráfico
+    title = ax.text(.5, 1.05, '', horizontalalignment='center', fontsize=13,
+                    transform=ax.transAxes)
+
+    # capas vectoriales
+    cuenca.boundary.plot(color=color, lw=1., ax=ax, zorder=3)
+
+    # dem de fondo
+    ax.imshow(DEM.data, extent=DEM.extent, cmap='pink', zorder=1)
+
+    # mapa
+    im = ax.imshow(np.zeros(data.shape[1:]), cmap=cmap, norm=norm, extent=raster.extent(),
+                   zorder=2)
+
+    ax.set_aspect('equal')
+    ax.set(xlim=(extent[0], extent[1]), ylim=(extent[2], extent[3]))
+    ax.axis('off');
+
+    # barra de la leyenda
+    snow_patch = mpatches.Patch(color=cmap.colors[1], label='snow')
+    fig.legend(handles=[snow_patch], loc=8, fontsize=13)
+
+    def updatefig(i, *args):
+        """Función que define los zdatos a mostrar  el título en cada iteración"""
+        title.set_text(times[i].strftime(dateformat))
+        im.set_array(data[i,:,:])
+        return im,
+
+    # genera la animación iterando sobre 'updatefig' un número 'frames' de veces
+    ani = animation.FuncAnimation(fig, updatefig, frames=data.shape[0], interval=1000/fps,
+                                  blit=True)
+    # guardar vídeo
+    if export:
+        mp4File = rutaExport + '{0}_{1}.mp4'.format(raster.label, times[0].strftime('%Y%m%d%H'))
+        print('Exportando archivo {0}'.format(mp4File))
+        ani.save(mp4File, fps=fps, extra_args=['-vcodec', 'libx264'], dpi=dpi)
+
+    # ver vídeo en el 'notebook'
+    return HTML(ani.to_html5_video())
+
+
+# ### video2
+
+# In[116]:
+
+
+def video2(raster1, raster2, cuenca, cmap, norm, DEM=None, fps=2, dpi=600, export=None, **kwargs):
+    """Crea un vídeo con la predicción de HARMONIE.
+
+    Entradas:
+    ---------
+    raster1:    class raster3D
+    raster2:    class raster3D
+    cuenca:     geodataframe. Polígonos de las cuencas
+    cmap:
+    norm:
+    DEM:        class raster2D. Mapa de elevación
+    fps:        int. 'frames per seconds'. Número de pasos temporales a mostrar por segundo
+    dpi:        int. 'dots per inch'. Resolución del mapa
+    export:     boolean. Si se quiere exportar la figura como pdf
+
+    kwargs:
+                figsize:    list (,). Tamaño de la figura. Por defecto (16, 7)
+                color:      string. Color con el que definir los límites de las provincias. Por defecto es blanco
+                dateformat: string. Formato de las fechas en la figura. Por defecto '%d-%m-%Y %H:%M'
+                extent:     tuple [O, E, S, N]. Límites espaciales de la figura. Por defecto 'None'
+                rutaExport: string. Carpeta donde guardar el pdf. Por defecto '../output/'
+
+    Salidas:
+    --------
+    Mapas diarios
+    Si 'export == True', se exporta un pdf con el nombre 'label_pasada.mp4'. Por ejemplo, 'APCP_2020113000.mp4'
+    """
+
+    # extraer datos del raster
+    data1, X, Y, times = raster1.data, raster1.X, raster1.Y, raster1.times
+    data2 = raster2.data
+
+    # extraer kwargs
+    figsize = kwargs.get('figsize', (16, 3.75))#(17, 3.5)
+    color = kwargs.get('color', 'k')
+    dateformat = kwargs.get('dateformat', '%d-%m-%Y')
+    extent = kwargs.get('extent', raster1.extent())
+    rutaExport = kwargs.get('rutaExport', '../output/')
+    labels = kwargs.get('labels', ['', ''])
+
+    # definir configuración del gráfico en blanco
+    fig, ax = plt.subplots(ncols=2, figsize=figsize, sharex=True, sharey=True)
+
+    # título del gráfico
+    title = ax[0].text(1.05, 1.0, '', horizontalalignment='center', fontsize=13, transform=ax[0].transAxes)
+
+    # capas vectoriales
+    ax[0].text(.5, 1.05, labels[0], horizontalalignment='center', fontsize=14, transform=ax[0].transAxes)
+    cuenca.boundary.plot(color=color, lw=1., ax=ax[0], zorder=3)
+    # dem de fondo
+    ax[0].imshow(DEM.data, extent=DEM.extent, cmap='pink', zorder=1)
+    # mapa
+    im1 = ax[0].imshow(np.zeros(data1.shape[1:]), cmap=cmap, norm=norm, extent=raster1.extent(),
+                       zorder=2)
+    ax[0].set_aspect('equal')
+    ax[0].set(xlim=(extent[0], extent[1]), ylim=(extent[2], extent[3]))
+    ax[0].axis('off');
+
+    # capas vectoriales
+    ax[1].text(.5, 1.05, labels[1], horizontalalignment='center', fontsize=14, transform=ax[1].transAxes)
+    cuenca.boundary.plot(color=color, lw=1., ax=ax[1], zorder=3)
+    # dem de fondo
+    ax[1].imshow(DEM.data, extent=DEM.extent, cmap='pink', zorder=1)
+    # mapa
+    im2 = ax[1].imshow(np.zeros(data2.shape[1:]), cmap=cmap, norm=norm, extent=raster2.extent(),
+                       zorder=2)
+    ax[1].set_aspect('equal')
+    ax[1].set(xlim=(extent[0], extent[1]), ylim=(extent[2], extent[3]))
+    ax[1].axis('off');
+
+    # barra de la leyenda
+    snow_patch = mpatches.Patch(color=cmap.colors[1], label='snow')
+    fig.legend(handles=[snow_patch], loc=8, fontsize=13)
+
+    def updatefig(i, *args):
+        """Función que define los zdatos a mostrar  el título en cada iteración"""
+        title.set_text(times[i].strftime(dateformat))
+        im1.set_array(data1[i,:,:])
+        im2.set_array(data2[i,:,:])
+        return im1, im2
+
+    # genera la animación iterando sobre 'updatefig' un número 'frames' de veces
+    ani = animation.FuncAnimation(fig, updatefig, frames=data1.shape[0], interval=1000/fps,
+                                  blit=True)
+    # guardar vídeo
+    if export is not None:
+        if export.endswith('mp4'):
+            print('Exportando archivo {0}'.format(export))
+            ani.save(export, fps=fps, extra_args=['-vcodec', 'libx264'], dpi=dpi)
+        else:
+            print('Formato de archivo incorrecto; ha de ser mp4.')
+
+    # ver vídeo en el 'notebook'
+    return HTML(ani.to_html5_video())
+
+
+def MODIS2netCDF(file, raster3D, description=None):
+    """Exportar datos MODIS como netCDF.
+    
+    Entradas:
+    ---------
+    file:        string. Archivo (incluye ruta y extensión) donde guardar los datos
+    raster3D:    raster3D. Datos de MODIS
+    description: string. Descripción de los datos contenidos en 'raster3D' que se incluirá dentro del netCDF.
+    
+    Salida:
+    -------
+    Archivo netCDF con el nombre indicado
+    """
+    
+    # definir el netcdf
+    nc = Dataset(file, 'w', format='NETCDF4')
+
+    # crear atributos
+    nc.description = description
+    nc.history = 'Creado el ' + datetime.now().date().strftime('%Y-%m-%d')
+    nc.source = 'https://e4ftl01.cr.usgs.gov/'
+    nc.coordinateSystem = 'epsg:{0}'.format(raster3D.crs.to_epsg())
+
+    # crear las dimensiones
+    time = nc.createDimension('time', len(raster3D.times))
+    Y = nc.createDimension('Y', len(raster3D.Y))
+    X = nc.createDimension('X', len(raster3D.X))
+
+    # crear variables
+    Var = nc.createVariable(raster3D.variable, 'f4', ('time', 'Y', 'X'))
+    Var.units = raster3D.units
+    times = nc.createVariable('time', 'f8', ('time',))
+    times.units = 'días desde el 0001-01-01'
+    times.calendar = 'Gregoriano'
+    Xs = nc.createVariable('X', 'u4', ('X',))
+    Xs.units = 'm'
+    Ys = nc.createVariable('Y', 'u4', ('Y',))
+    Ys.units = 'm'
+
+    # variable
+    Var[:,:,:] = raster3D.data[:,:,:]
+    # variable 'time'
+    deltas = [date - datetime(1, 1, 1).date() for date in raster3D.times]
+    times[:] = [delta.days for delta in deltas]
+    # variable 'X'
+    Xs[:] = raster3D.X # + cellsize / 2
+    # variable 'Y'
+    Ys[:] = raster3D.Y # + cellsize / 2
+
+    nc.close()
+    
+    
+def netCDF2MODIS(file, label=None):
+    """Leer datos de MODIS guardados en formato netCDF y crear un objeto raster3D con ellos
+    
+    Entradas:
+    ---------
+    file:     string. Archivo netCDF (incluida ruta y extensión) con los datos
+    label:    string. Etiqueta a asignar a la variable
+    """
+    
+    # abrir conexión con el archivo netCDF
+    nc = Dataset(file, 'r', format='NETCDF4')
+    
+    # extraer datos
+    for variable in nc.variables:
+        if variable not in ['time', 'X', 'Y']:
+            break
+    data = nc[variable][::]
+    units = nc[variable].units
+    # fechas
+    times = np.array([datetime(1, 1, 1).date() + timedelta(time) for time in nc['time'][:].data])
+    # coordenadas
+    X = nc['X'][:].data
+    Y = nc['Y'][:].data
+    crs = CRS.from_epsg(nc.coordinateSystem.split(':')[1])
+
+    # guardar como objeto raster3D
+    MODIS = raster3D(data, X, Y, times, variable=variable, label=label, units=units,
+                       crs=crs)
+    
+    # cerrar archivo netCDF
+    nc.close()
+    
+    return MODIS
+
+
+def missingMaps(Terra, Aqua, verbose=True):
+    """Encuentra mapas que falten en la serie temporal de cada uno de los satélites. En caso de encontrarlos, los intenta rellenar con los datos del otro satélite. Si el otro satélite tampoco dipusiera de datos para esa fecha, se crea un mapa vacío en esa fecha.
+    
+    Entradas:
+    ---------
+    Terra:   raster3D. Datos de Terra
+    Aqua:    raster3D. Datos de Aqua
+    verbose: boolean. Mostrar el proceso en pantalla
+    
+    Salidas:
+    --------
+    Terra_:  raster3D. Datos de Terra completados
+    Aqua_:   raster3D. Datos de Aqua completados
+    """
+    
+    Terra_ = copy.deepcopy(Terra)
+    Aqua_ = copy.deepcopy(Aqua) 
+    
+    # datos modicados y originales
+    for label, mod, ori in zip(['Terra', 'Aqua'], [Terra_, Aqua_], [Aqua, Terra]):
+        if verbose:
+            print(label.upper())
+            print('-' * len(label))
+        # identificar mapas que falten
+        mask = np.diff(mod.times) > timedelta(days=8)
+        mask = np.append(mask, False)
+        if verbose:
+            print('t', 'time', '\tDisp', sep='\t')
+        missing = []
+        for t in np.where(mask == True)[0]:
+            time = mod.times[t] + timedelta(days=8)
+            missing.append(time)
+            if verbose:
+                print(t, time, time in ori.times, sep='\t')
+
+        # rellenar mapas que falten
+        for time in missing:
+            # posición en el array
+            t = np.where(mod.times >= time)[0][0]
+
+            # introducir el mapa en 'data'
+            if time in ori.times:
+                mod.data = np.concatenate((mod.data[:t,:,:],
+                                           ori.data[t:t+1,:,:],
+                                           mod.data[t:,:,:]))
+            else:
+                mod.data = np.concatenate((mod.data[:t,:,:],
+                                           np.zeros((1, *mod.data.shape[1:])) * np.nan,
+                                           mod.data[t:,:,:]))
+
+            # introducir la fecha en 'times'
+            mod.times = np.concatenate((mod.times[:t],
+                                        np.array([time]),
+                                        mod.times[t:]))
+        print()
+            
+    return Terra_, Aqua_

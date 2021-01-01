@@ -61,7 +61,7 @@ from datetime import datetime, timedelta
 
 import os
 
-from pyproj import Proj, transform, CRS
+from pyproj import Transformer, CRS
 os.environ['PROJ_LIB'] = r'C:\Anaconda3\pkgs\proj4-4.9.3-vc14_5\Library\share'
 
 from eofs.standard import Eof
@@ -148,17 +148,13 @@ def plotEOF(eofmap, pcs, eofvar='eofs', normPCs=False, fvar=None,
 
 
 
-def eofMODIS(data, lats, nmodes, coordsIn='epsg:4326', lons=None, plot=None,
-             normPCs=True, rmap=.1, rserie=100):
+def eofMODIS(modis, nmodes, plot=None, normPCs=True, rmap=.1, rserie=100):
     """Hace un análisis EOF (empirical orthogonal functions) sobre los datos.
     
     Entradas:
     ---------
-    data:     array (n,m,p). Las filas representan los pasos temporales, para los que hay una matriz (m, p) de la variable de estudio
-    lats:     array (m,). Latitud de las filas de 'data'
-    nmodes:        integer. Número de modos (tanto para EOFs como PCs) a extraer de la descomposición EOF
-    coordsIn: string. Código epsg con el sistema de coordenadas de 'lats'. Por defecto WGS84 en coordenadas geográficas
-    lons:     array (p,). Longitud de las columnas de 'data'. Sólo es necesario si 'coordsIn' difiere de 'epsg:4326'
+    modis:    raster3D (t,y,x). Las filas representan los pasos temporales, para los que hay una matriz (m, p) de la variable de estudio
+    nmodes:   integer. Número de modos (tanto para EOFs como PCs) a extraer de la descomposición EOF
     plot:     string. Si se quiere mostrar el gráfico de EOFs y PCs, se debe introducir la variable de interés: 'eofs', valores absolutos de los EOFs; 'corr', correlación; 'var', varianza explicada
     normPCS:  boolean. Si se quieren mostrar en el gráfico de PCs sus valores normalizados o no
     rmap:    float. Valor de redondeo de los mapas
@@ -167,28 +163,37 @@ def eofMODIS(data, lats, nmodes, coordsIn='epsg:4326', lons=None, plot=None,
     Salidas:
     --------
     Como métodos de la función.
-        pcs:   array (n,nmodes). Series de los PCs para cada modo
-        eofs:  array (nmodes,m,p). Mapa de los EOFs para cada modo
-        corr:  array (nmodes,m,p). Para cada modo, mapa de correlación entre el PC y la serie temporal de cada celda
-        var:   array (nmodes,m,p). Para cada modo, mapa de varianza explicada
+        pcs:   array (t,nmodes). Series de los PCs para cada modo
+        eofs:  array (nmodes,y,x). Mapa de los EOFs para cada modo
+        corr:  array (nmodes,y,x). Para cada modo, mapa de correlación entre el PC y la serie temporal de cada celda
+        var:   array (nmodes,y,x). Para cada modo, mapa de varianza explicada
         fvar:  array. Fracción de la varianza total explicada por cada uno de los modos (no sólo por lo 'nmodes' seleccionados)
     Si plot!=None, gráfico con los mapas de los EOFs y las series de los PCs.
     """
     
-    if coordsIn != 'epsg:4326':
-        if lons is None:
-            print("ERROR. 'lons' es necesario para transformar las coordenadas")
-        coordsIn = Proj(init=coordsIn)
-        WGS84 = Proj(init='epsg:4326')
-        lon = lons[int(len(lons) / 2)]
-        lats = [transform(coordsIn, WGS84, lon, lat)[1] for lat in lats]       
-    
+    # extraer información de 'modis'
+    data = modis.data
+    times = modis.times
+    X, Y, crs = modis.X, modis.Y, modis.crs
+
+    # coordenadas y dimensiones del mapa
+    nrows, ncols = len(Y), len(X)
+    XX, YY = np.meshgrid(X, Y)
+
+    if crs.to_epsg() != 4326:
+        WGS84 = CRS.from_epsg(4326)
+        project = Transformer.from_crs(crs, WGS84)
+
+        # transformar coordenadas
+        lat, lon = project.transform(XX.flatten(), YY.flatten())
+        llon, llat = lon.reshape((nrows, ncols)), lat.reshape((nrows, ncols))
+
     # pesos
-    wgts = np.sqrt(np.cos(np.deg2rad(lats)))[:, np.newaxis]
-    
+    wgts = np.sqrt(np.cos(np.deg2rad(lat))).reshape(*data.shape[1:])
+
     # crear un 'solver'
     solver = Eof(data, weights=wgts) #, weights=weights_array, center=True, ddof=1)
-    
+
     # extraer resultados
     pcs = solver.pcs(npcs=nmodes)        # componentes principales
     eofs = solver.eofs(neofs=nmodes)     # empirical ortogonal functions (autovectores)
@@ -217,7 +222,7 @@ def eofMODIS(data, lats, nmodes, coordsIn='epsg:4326', lons=None, plot=None,
     eofMODIS.correlation = corr
     eofMODIS.explainedVariance = var
     eofMODIS.fractionVariance = fvar
-    
+
     # gráficos
     if plot is not None:
         if plot == 'corr':
