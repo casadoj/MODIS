@@ -502,15 +502,19 @@ def plotMODISseries(MODIS, **kwargs):
     MODIS:   dict. Contiene los datos de las fuentes ('Terra' y 'Aqua') como objetos raster3D
     
     kwargs:     r:       int or float. Redondeo
+                xlim
                 ymin:    boolean. Si se quiere calcular el mínimo del eje Y (True), o se fija en 0 (False)
                 ylabel:  string. Etiqueta del eje y
                 lw:      float. Grosor de línea
                 alpha:   float. Transparencia
+                figsize: 
     """
     
 
     # extraer kwargs
     r = kwargs.get('r', 1)
+    xlim = kwargs.get('xlim', [min([min(MODIS[sat].times) for sat in MODIS]),
+                               max([max(MODIS[sat].times) for sat in MODIS])])
     ymin = kwargs.get('ymin', 0)
     ylabel = kwargs.get('ylabel', '')
     lw = kwargs.get('lw', .25)
@@ -518,17 +522,18 @@ def plotMODISseries(MODIS, **kwargs):
     figsize = kwargs.get('figsize', (15, 7))
 
     # mostrar la serie 8-diaria para cada celda y la media de la cuenca
-    fig, axes = plt.subplots(nrows=2, figsize=figsize, sharex=True)
+    nSats = len(MODIS.keys())
+    fig, axes = plt.subplots(nrows=nSats, figsize=figsize, sharex=True)
 
-    xlim = [min([min(MODIS[sat].times) for sat in MODIS]),
-            max([max(MODIS[sat].times) for sat in MODIS])]
     if ymin == True:
         ymin = np.floor(min([np.nanmin(MODIS[sat].data) for sat in MODIS]) / r) * r
     else:
         ymin = 0
     ymax = np.ceil(max([np.nanmax(MODIS[sat].data) for sat in MODIS]) / r) * r
     
-    colors = [['yellowgreen', 'darkolivegreen'], ['lightsteelblue', 'steelblue']]
+    colors = [['yellowgreen', 'darkolivegreen'],
+              ['lightsteelblue', 'steelblue'],
+              ['gray', 'k']]
 
     for c, (ax, sat) in enumerate(zip(axes, MODIS)):
         timex, datax = MODIS[sat].times, MODIS[sat].data
@@ -537,8 +542,11 @@ def plotMODISseries(MODIS, **kwargs):
                 if np.all(np.isnan(datax[:,i,j])): # celda vacía
                     continue
                 else:
-                    # serie de una celda
-                    ax.plot(timex, datax[:,i,j], lw=lw, c=colors[c][0], alpha=alpha)
+                    try:
+                        # serie de una celda
+                        ax.plot(timex, datax[:,i,j], lw=lw, c=colors[c][0], alpha=alpha)
+                    except:
+                        return i, j
         # serie media areal
         ax.plot(timex, np.nanmean(datax, axis=(1, 2)), c=colors[c][1], lw=4*lw)
         # configuración
@@ -1397,3 +1405,52 @@ def missingMaps(Terra, Aqua, verbose=True):
         print()
             
     return Terra_, Aqua_
+
+
+def combinarMODIS(Aqua, Terra, verbose=True):
+    """Combina los datos de Aqua y Terra mediante la media.
+    
+    Entradas:
+    ---------
+    Aqua:    raster3D
+    Terra:   raster3D
+    verbose: boolean. Si mostrar el proceso por pantalla
+    
+    Salidas:
+    --------
+    union:   raster3D
+    """
+    
+
+    # Extraer fechas de Aqua y Terra
+    timesA = Aqua.times
+    timesT = Terra.times
+
+    # escoger la serie de fechas más larga
+    if len(timesA) >= len(timesT):
+        times = timesA
+    else:
+        times = timesT
+
+    # array con la media de los dos satélites
+    data = np.zeros((len(times), *Aqua.data.shape[1:])) * np.nan
+    for t, time in enumerate(times):
+        if verbose:
+            print('{0}:\t{1:<4} de {2:<4}'.format(time, t + 1, data.shape[0]), end='\r')
+        if (time in timesA) & (time in timesT):
+            tA = np.where(timesA == time)[0][0]
+            tT = np.where(timesT == time)[0][0]
+            data[t,:,:] = np.nanmean(np.stack((Aqua.data[tA,:,:], Terra.data[tT,:,:]),
+                                              axis=0), axis=0)
+        elif time not in timesA:
+            tT = np.where(timesT == time)[0][0]
+            data[t,:,:] = Terra.data[tT,:,:]
+        elif time not in timesT:
+            tA = np.where(timesA == time)[0][0]
+            data[t,:,:] = Aqua.data[tA,:,:]
+
+    # convertir en raster3D
+    union = raster3D(data, Aqua.X, Aqua.Y, times, Aqua.units, Aqua.variable, Aqua.label,
+                     Aqua.crs)
+
+    return union
