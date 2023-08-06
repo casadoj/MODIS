@@ -795,6 +795,7 @@ def serieMensual(modis, agg='mean'):
     serieM:    raster3D (t',n,m). Mapas de la serie mensual
     """
     
+
     # extraer información de 'modis'
     times = modis.times
     data = modis.data
@@ -824,16 +825,18 @@ def serieMensual(modis, agg='mean'):
                 if At > 1: # si la serie original no es diaria
                     # generar serie diaria
                     auxd = pd.Series(index=days)
-                    for k, (st, et) in enumerate(zip(times, data[:,i,j])):
-                        if np.isnan(et):
+                    for k, (st, value) in enumerate(zip(times, data[:,i,j])):
+                        if np.isnan(value):
                             continue
                         else:
                             if st != times[-1]:
                                 en = times[k+1]
-                                auxd[st:en - timedelta(1)] = et / (en - st).days
                             else:
                                 en = st + timedelta(At)
-                                auxd[st:end - timedelta(1)] = et / (en - st).days
+                            if agg == 'mean':
+                                auxd[st:en - timedelta(1)] = value
+                            elif agg == 'sum': # calcular la media en los días del periodo
+                                auxd[st:en - timedelta(1)] = value / (en - st).days
                 else: # si la serie original es diaria
                     auxd = pd.Series(data=data[:,i,j], index=days)
                 # generar serie mensual
